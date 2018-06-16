@@ -8,7 +8,7 @@ import (
 
 const (
 	C_INT = iota
-	C_STR
+	C_STRING
 	C_ARRAY
 	C_FPTR
 )
@@ -26,12 +26,12 @@ func (this ret) isInt() bool {
 	return this.typeId == C_INT
 }
 
-func (this ret) isStr() bool {
-	return this.typeId == C_STR
+func (this ret) isString() bool {
+	return this.typeId == C_STRING
 }
 
-func (this ret) isArr() bool {
-	return this.typeId == C_ARR
+func (this ret) isArray() bool {
+	return this.typeId == C_ARRAY
 }
 
 const (
@@ -76,13 +76,17 @@ func newGlobalEnv() *environment {
 			env.addBody(fmt.Sprintf("int %s = 1;", retName))
 		} else {
 			emit(c, env)
-			/* FIXME
+
 			ret := env.popRet()
-
-			if ret
-
-			*/
-			env.addBody(fmt.Sprintf("int %s = 0;", retName))
+			if ret.isArray() {
+				// FIXME
+				// At the compile time, it is impossible to determine whether
+				// the returned value is atom or not.
+				//env.addBody(fmt.Sprintf("int %s = 0 == ;", retName))
+				env.addBody(fmt.Sprintf("int %s = 0;", retName))
+			} else {
+				env.addBody(fmt.Sprintf("int %s = 1;", retName))
+			}
 		}
 		env.pushRet(newRet(C_INT, retName))
 	}
@@ -105,7 +109,7 @@ func newGlobalEnv() *environment {
 				if ret.isInt() {
 					printArgs += fmt.Sprintf(", %s", ret.name)
 					printBody += " %d"
-				} else if ret.isStr() {
+				} else if ret.isString() {
 					printArgs += fmt.Sprintf(", %s", ret.name)
 					printBody += " %s"
 				} else {
@@ -120,7 +124,7 @@ func newGlobalEnv() *environment {
 		retName := fmt.Sprintf("print_ret_%d", n)
 		env.addBody(fmt.Sprintf("char* %s = \"#<undef>\";", retName))
 
-		env.pushRet(newRet(C_STR, retName))
+		env.pushRet(newRet(C_STRING, retName))
 	}
 	return env
 }

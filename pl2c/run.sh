@@ -1,11 +1,11 @@
 set -eux
 rm -f __test.c
 goimports -w *.go
-go build
+go build -o __pl2c.exe
 #./purelisp.exe > test.ll
 #clang test.ll
-./purelisp.exe > __test.c
+./__pl2c.exe > __test.c
 cat __test.c
-gcc __test.c
-./a.exe
+gcc __test.c -o __a.exe
+./__a.exe
 
