@@ -62,7 +62,21 @@ func newGlobalEnv() *environment {
 
 	env.dict = map[string]func([]*cell, *environment){}
 	env.dict["+"] = func(args []*cell, e *environment) {
+		n := env.next()
+		retName := fmt.Sprintf("plus_%d", n)
+		env.addBody(fmt.Sprintf("int %s = 0;", retName))
 
+		for _, c := range args {
+			if c.isNum() {
+				env.addBody(fmt.Sprintf("%s += %s;", retName, c.value))
+			} else {
+				emit(c, env)
+				ret := env.popRet()
+				env.addBody(fmt.Sprintf("%s += %s;", retName, ret.name))
+			}
+		}
+
+		env.pushRet(newRet(C_INT, retName))
 	}
 	env.dict["atom"] = func(args []*cell, e *environment) {
 		if len(args) != 1 {
@@ -163,6 +177,13 @@ func (this *environment) print() {
 	for h, _ := range this.header {
 		fmt.Printf("#include<%s>\n", h)
 	}
+
+	fmt.Println(`
+	typedef struct PAIR_ {
+		int car;
+		struct pair_ *cdr;
+	} PAIR;
+	`)
 	fmt.Println("int main() {")
 	fmt.Println(this.body)
 	fmt.Println("}")
@@ -342,7 +363,11 @@ func main() {
 	//code := "(+ 1 (- 3 2))"
 	//code := "(+ 1 2)"
 	//code := "(print (print 1 2 3 4) (print 3 5 5))"
-	code := "(print (atom 4) (atom (print 3)))"
+	//code := "(print (atom 4) (atom (print 3)))"
+	//code := "(print (+ 1 2))"
+	//code := "(print (+ 3 (+ 1 2)))"
+	//code := "(print (+ 3 (+ 1 2) 8))" // FIXME raise compile error
+	code := "(print (+ 3 (+ 1 2) 8)))"
 	/*
 		fmt.Println(code)
 		fmt.Println(parse(code).str())
