@@ -6,6 +6,7 @@ go build -o __pl2c.exe
 #clang test.ll
 ./__pl2c.exe > __test.c
 cat __test.c
-gcc __test.c -o __a.exe
-./__a.exe
+
+
+gcc __test.c -o __a.exe && ./__a.exe
 

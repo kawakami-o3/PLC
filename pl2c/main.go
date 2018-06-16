@@ -49,6 +49,7 @@ type environment struct {
 	body     string
 
 	retStack []ret
+	defined  map[string]int
 }
 
 func newGlobalEnv() *environment {
@@ -59,6 +60,7 @@ func newGlobalEnv() *environment {
 	env.header = map[string]int{}
 	env.body = ""
 	env.retStack = []ret{}
+	env.defined = map[string]int{}
 
 	env.dict = map[string]func([]*cell, *environment){}
 	env.dict["+"] = func(args []*cell, e *environment) {
@@ -104,6 +106,54 @@ func newGlobalEnv() *environment {
 		}
 		env.pushRet(newRet(C_INT, retName))
 	}
+	env.dict["define"] = func(args []*cell, e *environment) {
+		if args[0].isAtom() {
+			// variable
+			// simple assignment, When a variable is already declared.
+
+			if !args[1].isNum() {
+				panic("expected number as value")
+			}
+			retName := args[0].value
+			value := args[1].value
+
+			if env.defined[retName] == 0 {
+				env.defined[retName] = 1
+				// expect INT
+				env.addBody(fmt.Sprintf("int %s = %s;", retName, value))
+			} else {
+				env.addBody(fmt.Sprintf("%s = %s;", retName, value))
+			}
+
+			// maybe need care about a collision with system variables,
+			// especially in case of invalid type.
+			env.pushRet(newRet(C_STRING, retName))
+		} else {
+			// function
+			panic("")
+		}
+	}
+	env.dict["progn"] = func(args []*cell, e *environment) {
+		// return integer now.
+
+		var r ret
+		for _, c := range args {
+			emit(c, env)
+			r = env.popRet()
+		}
+
+		n := env.next()
+		retName := fmt.Sprintf("progn_%d", n)
+
+		if r.isInt() {
+			env.addBody(fmt.Sprintf("int %s = %s;", retName, r.name))
+		} else {
+			// FIXME
+			env.addBody(fmt.Sprintf("int %s = 0;", retName))
+		}
+
+		env.pushRet(newRet(C_INT, retName))
+	}
 	env.dict["print"] = func(args []*cell, e *environment) {
 		e.addHeader("stdio.h")
 
@@ -115,7 +165,7 @@ func newGlobalEnv() *environment {
 				printBody += " %d"
 			} else if c.isAtom() {
 				printArgs += fmt.Sprintf(", %s", c.value)
-				printBody += " %s"
+				printBody += " %d"
 			} else {
 				emit(c, env)
 
@@ -179,10 +229,10 @@ func (this *environment) print() {
 	}
 
 	fmt.Println(`
-	typedef struct PAIR_ {
-		int car;
-		struct pair_ *cdr;
-	} PAIR;
+typedef struct PAIR_ {
+	int car;
+	struct pair_ *cdr;
+} PAIR;
 	`)
 	fmt.Println("int main() {")
 	fmt.Println(this.body)
@@ -191,7 +241,10 @@ func (this *environment) print() {
 
 func emit(cell *cell, env *environment) {
 	switch cell.typeId {
+	case LISP_NUM:
+		panic("")
 	case LISP_ATOM:
+		env.pushRet(newRet(C_INT, cell.value))
 	case LISP_LIST:
 		if cell.list[0].typeId == LISP_ATOM {
 			emitter := env.dict[cell.list[0].value]
@@ -305,6 +358,9 @@ func tokenize(code string) *TokenBuffer {
 	tokens := []string{}
 	t := ""
 	for _, c := range code {
+		if c == '\n' {
+			c = ' '
+		}
 		if c == ' ' && len(t) > 0 {
 			tokens = append(tokens, t)
 			t = ""
@@ -367,7 +423,19 @@ func main() {
 	//code := "(print (+ 1 2))"
 	//code := "(print (+ 3 (+ 1 2)))"
 	//code := "(print (+ 3 (+ 1 2) 8))" // FIXME raise compile error
-	code := "(print (+ 3 (+ 1 2) 8)))"
+	//code := "(print (+ 3 (+ 1 2) 8)))"
+
+	/*
+		code := `
+		(progn
+
+		(define a 10)
+		(print (+ 3 a))
+		)
+		`
+	*/
+	code := "(progn\n (define a 10) (print (+ 100 a)))"
+
 	/*
 		fmt.Println(code)
 		fmt.Println(parse(code).str())
