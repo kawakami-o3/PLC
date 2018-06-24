@@ -1,5 +1,6 @@
 set -x
 rm -f __test.c
+grep '\tcode' main.go
 goimports -w *.go
 go build -o __pl2c.exe && ./__pl2c.exe > __test.c && cat __test.c
 

@@ -154,34 +154,38 @@ func newGlobalEnv() *environment {
 			env.pushRet(newRet(C_FPTR, retName))
 		}
 	*/
-	env.registFunc("define", func(args []*cell, e *environment) {
-		if args[0].isAtom() {
-			// variable
-			// simple assignment, When a variable is already declared.
 
-			if !args[1].isNum() {
-				panic("expected number as value")
-			}
-			retName := args[0].value
-			value := args[1].value
+	/*
+		env.registFunc("define", func(args []*cell, e *environment) {
+			if args[0].isAtom() {
+				// variable
+				// simple assignment, When a variable is already declared.
 
-			d := env.find(retName)
-			if d == nil {
-				env.registVar(retName)
-				// expect INT
-				env.putsMain(fmt.Sprintf("int %s = %s;", retName, value))
+				if !args[1].isNum() {
+					panic("expected number as value")
+				}
+				retName := args[0].value
+				value := args[1].value
+
+				d := env.find(retName)
+				if d == nil {
+					env.registVar(retName)
+					// expect INT
+					env.putsMain(fmt.Sprintf("int %s = %s;", retName, value))
+				} else {
+					env.putsMain(fmt.Sprintf("%s = %s;", retName, value))
+				}
+
+				// maybe need care about a collision with system variables,
+				// especially in case of invalid type.
+				env.pushRet(newRet(C_STRING, retName))
+
+				panic("hoge")
 			} else {
-				env.putsMain(fmt.Sprintf("%s = %s;", retName, value))
+				panic("")
 			}
-
-			// maybe need care about a collision with system variables,
-			// especially in case of invalid type.
-			env.pushRet(newRet(C_STRING, retName))
-		} else {
-			// function
-			panic("")
-		}
-	})
+		})
+	*/
 	env.registFunc("progn", func(args []*cell, e *environment) {
 		// return integer now.
 
@@ -230,9 +234,6 @@ func newGlobalEnv() *environment {
 				} else {
 					panic("")
 				}
-
-				//pp.Println(env)
-				//printBody += ","
 			}
 		}
 
@@ -377,10 +378,10 @@ func emit(cell *cell, env *environment) {
 			}
 			return
 		}
-		panic("not found: " + cell.value)
+		//panic("not found: " + cell.value)
 
 		//env.pushRet(newRet(C_INT, cell.value))
-		return
+		//return
 	case LISP_LIST:
 		head := cell.list[0].value
 		/*
@@ -396,6 +397,47 @@ func emit(cell *cell, env *environment) {
 			} else {
 		*/
 		switch head {
+		case "define":
+			//args := cell.list[1:]
+			label := cell.list[1]
+			body := cell.list[2]
+			if body.typeId == LISP_LIST && len(body.list) > 0 && body.list[0].value == "lambda" {
+
+				retName := label.value
+				emit(body, env)
+				bodyRet := env.popRet()
+
+				d := env.find(retName)
+				if d == nil {
+					env.registFunc(retName, nil) // need body?
+					// expect INT
+					env.putsMain(fmt.Sprintf("int (*%s)(int*) = %s;", retName, bodyRet.name))
+				} else {
+					env.putsMain(fmt.Sprintf("%s = %s;", retName, bodyRet.name))
+				}
+				env.pushRet(newRet(C_STRING, retName))
+
+			} else if body.isNum() {
+				retName := label.value
+				value := body.value
+
+				d := env.find(retName)
+				if d == nil {
+					env.registVar(retName)
+					// expect INT
+					env.putsMain(fmt.Sprintf("int %s = %s;", retName, value))
+				} else {
+					env.putsMain(fmt.Sprintf("%s = %s;", retName, value))
+				}
+
+				// maybe need care about a collision with system variables,
+				// especially in case of invalid type.
+				env.pushRet(newRet(C_STRING, retName))
+
+			} else {
+				panic("not implemented [0]")
+			}
+			return
 		case "lambda":
 			localEnv := newLocalEnv(env)
 			for _, c := range cell.list[1].list {
@@ -447,6 +489,7 @@ func emit(cell *cell, env *environment) {
 			for _, e := range exps {
 				env.retStack = append([]ret{*e}, env.retStack...)
 			}
+			//pp.Println(proc)
 			proc.proc(cell.list[1:], env)
 		} else {
 			// lambda
@@ -506,7 +549,7 @@ func newAtom(token string) *cell {
 	return &cell{
 		typeId: LISP_ATOM,
 		value:  token,
-		list:   nil,
+		list:   []*cell{},
 	}
 }
 
@@ -515,7 +558,7 @@ func newNum(token string, n int) *cell {
 		typeId: LISP_NUM,
 		value:  token,
 		num:    n,
-		list:   nil,
+		list:   []*cell{},
 	}
 }
 
@@ -531,7 +574,7 @@ func newLambda() *cell {
 	return &cell{
 		typeId: LISP_LAMBDA,
 		value:  "",
-		list:   nil,
+		list:   []*cell{},
 	}
 }
 
@@ -646,20 +689,16 @@ func main() {
 	//code := "(print (+ 3 (+ 1 2) 8))" // FIXME raise compile error
 	//code := "(print (+ 3 (+ 1 2) 8)))"
 
-	/*
-		code := `
-		(progn
-
-		(define a 10)
-		(print (+ 3 a))
-		)
-		`
-	*/
 	//code := "(progn\n (define a 10) (print (+ 100 a)))"
+
+	// lambda
 	//code := "(print ((lambda (x) (+ x 1)) 10))"
 	//code := "(print ((lambda (x) (+ x 1)) 10) ((lambda (y) (+ y 20)) 3))"
-	//code := "(print ((lambda (x) (+ x 1)) 10) ((lambda (y z) (+ y z 20)) 3 8))"
-	code := "(print (lambda (x) (+ x 1)))"
+	code := "(print ((lambda (x) (+ x 1)) 10) ((lambda (y z) (+ y z 20)) 3 8))"
+
+	// define lambda
+	//code := "(define fact 10)" // define function -> special form
+	//code := "(progn (define fact (lambda (x) (+ x 1))) (print (fact 10)))"
 
 	/*
 		fmt.Println(code)
