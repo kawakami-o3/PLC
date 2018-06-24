@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-
-	"github.com/k0kubun/pp"
 )
 
 const (
@@ -17,19 +15,25 @@ const (
 	C_VAR
 )
 
+const (
+	LB  = `\0A`
+	EOF = `\00`
+)
+
 type ret struct {
 	typeId int
 	name   string
 	proc   func([]*cell, *environment)
+	env    *environment
+	args   []string
 }
 
 func newRet(typeId int, name string) ret {
-	return ret{typeId, name, nil}
+	return ret{typeId, name, nil, nil, []string{}}
 }
 
-func newRetProc(procBody func([]*cell, *environment)) ret {
-	// need environment?
-	return ret{C_PROC, "proc", procBody}
+func newRetProc(name string, proc func([]*cell, *environment), env *environment) ret {
+	return ret{C_PROC, name, proc, env, []string{}}
 }
 
 func (this ret) isInt() bool {
@@ -45,58 +49,79 @@ func (this ret) isArray() bool {
 }
 
 const (
-	LB  = `\0A`
-	EOF = `\00`
+	DECL_FUNC = iota
+	DECL_VAR
 )
+
+type decl struct {
+	typeId int
+	name   string                      // variable name
+	proc   func([]*cell, *environment) // proc body
+}
+
+func newDecl(typeId int, name string, proc func([]*cell, *environment)) *decl {
+	return &decl{typeId, name, proc}
+}
 
 type environment struct {
 	parent *environment
-	dict   map[string]func([]*cell, *environment)
+	/*
+		dictFunc   map[string]func([]*cell, *environment)
+		dictVar  map[string]struct{}
+	*/
+	dict map[string]*decl
 
-	count int
-
+	// not yet shared in an environment tree.
+	count    int // instruction count
 	strCount int
-	header   map[string]int
-	body     string
+
+	header map[string]struct{} // header file
+	pre    string
+	main   string
 
 	retStack []ret
-	defined  map[string]struct{}
 }
 
 func newLocalEnv(parent *environment) *environment {
 	env := &environment{}
 	env.parent = parent
+
+	//env.dictFunc = map[string]func([]*cell, *environment){}
+	//env.dictVar = make(map[string]struct{})
+	env.dict = map[string]*decl{}
+
 	env.count = 0
 	env.strCount = 0
+
 	env.header = make(map[string]struct{})
-	env.body = ""
+	env.pre = ""
+	env.main = ""
+
 	env.retStack = []ret{}
-	env.defined = make(map[string]struct{})
-	env.dict = map[string]func([]*cell, *environment){}
 	return env
 }
 
 func newGlobalEnv() *environment {
 	env := newLocalEnv(nil)
 
-	env.dict["+"] = func(args []*cell, e *environment) {
-		n := env.next()
+	env.registFunc("+", func(args []*cell, local *environment) {
+		n := local.next()
 		retName := fmt.Sprintf("plus_%d", n)
-		env.addBody(fmt.Sprintf("int %s = 0;", retName))
+		local.putsMain(fmt.Sprintf("int %s = 0;", retName))
 
 		for _, c := range args {
 			if c.isNum() {
-				env.addBody(fmt.Sprintf("%s += %s;", retName, c.value))
+				local.putsMain(fmt.Sprintf("%s += %s;", retName, c.value))
 			} else {
-				emit(c, env)
-				ret := env.popRet()
-				env.addBody(fmt.Sprintf("%s += %s;", retName, ret.name))
+				emit(c, local)
+				ret := local.popRet()
+				local.putsMain(fmt.Sprintf("%s += %s;", retName, ret.name))
 			}
 		}
 
-		env.pushRet(newRet(C_INT, retName))
-	}
-	env.dict["atom"] = func(args []*cell, e *environment) {
+		local.pushRet(newRet(C_INT, retName))
+	})
+	env.registFunc("atom", func(args []*cell, e *environment) {
 		if len(args) != 1 {
 			panic("atom: invalid arguments")
 		}
@@ -105,7 +130,7 @@ func newGlobalEnv() *environment {
 		n := env.next()
 		retName := fmt.Sprintf("atom_%d", n)
 		if c.isAtom() || c.isNum() || c.isNil() {
-			env.addBody(fmt.Sprintf("int %s = 1;", retName))
+			env.putsMain(fmt.Sprintf("int %s = 1;", retName))
 		} else {
 			emit(c, env)
 
@@ -114,14 +139,14 @@ func newGlobalEnv() *environment {
 				// FIXME
 				// At the compile time, it is impossible to determine whether
 				// the returned value is atom or not.
-				//env.addBody(fmt.Sprintf("int %s = 0 == ;", retName))
-				env.addBody(fmt.Sprintf("int %s = 0;", retName))
+				//env.putsMain(fmt.Sprintf("int %s = 0 == ;", retName))
+				env.putsMain(fmt.Sprintf("int %s = 0;", retName))
 			} else {
-				env.addBody(fmt.Sprintf("int %s = 1;", retName))
+				env.putsMain(fmt.Sprintf("int %s = 1;", retName))
 			}
 		}
 		env.pushRet(newRet(C_INT, retName))
-	}
+	})
 	/*
 		env.dict["lambda"] = func(args []*cell, e *environment) {
 			n := env.next()
@@ -129,7 +154,7 @@ func newGlobalEnv() *environment {
 			env.pushRet(newRet(C_FPTR, retName))
 		}
 	*/
-	env.dict["define"] = func(args []*cell, e *environment) {
+	env.registFunc("define", func(args []*cell, e *environment) {
 		if args[0].isAtom() {
 			// variable
 			// simple assignment, When a variable is already declared.
@@ -140,13 +165,13 @@ func newGlobalEnv() *environment {
 			retName := args[0].value
 			value := args[1].value
 
-			_, contains := env.defined[retName]
-			if contains {
-				env.addBody(fmt.Sprintf("%s = %s;", retName, value))
-			} else {
-				env.defined[retName] = struct{}{}
+			d := env.find(retName)
+			if d == nil {
+				env.registVar(retName)
 				// expect INT
-				env.addBody(fmt.Sprintf("int %s = %s;", retName, value))
+				env.putsMain(fmt.Sprintf("int %s = %s;", retName, value))
+			} else {
+				env.putsMain(fmt.Sprintf("%s = %s;", retName, value))
 			}
 
 			// maybe need care about a collision with system variables,
@@ -156,11 +181,11 @@ func newGlobalEnv() *environment {
 			// function
 			panic("")
 		}
-	}
-	env.dict["progn"] = func(args []*cell, e *environment) {
+	})
+	env.registFunc("progn", func(args []*cell, e *environment) {
 		// return integer now.
 
-		var r ret
+		var r *ret
 		for _, c := range args {
 			emit(c, env)
 			r = env.popRet()
@@ -170,16 +195,16 @@ func newGlobalEnv() *environment {
 		retName := fmt.Sprintf("progn_%d", n)
 
 		if r.isInt() {
-			env.addBody(fmt.Sprintf("int %s = %s;", retName, r.name))
+			env.putsMain(fmt.Sprintf("int %s = %s;", retName, r.name))
 		} else {
 			// FIXME
-			env.addBody(fmt.Sprintf("int %s = 0;", retName))
+			env.putsMain(fmt.Sprintf("int %s = 0;", retName))
 		}
 
 		env.pushRet(newRet(C_INT, retName))
-	}
-	env.dict["print"] = func(args []*cell, e *environment) {
-		e.addHeader("stdio.h")
+	})
+	env.registFunc("print", func(args []*cell, e *environment) {
+		e.include("stdio.h")
 
 		printArgs := ""
 		printBody := ""
@@ -191,7 +216,9 @@ func newGlobalEnv() *environment {
 				printArgs += fmt.Sprintf(", %s", c.value)
 				printBody += " %d"
 			} else {
-				emit(c, env)
+				/*
+					emit(c, env)
+				*/
 
 				ret := env.popRet()
 				if ret.isInt() {
@@ -203,29 +230,45 @@ func newGlobalEnv() *environment {
 				} else {
 					panic("")
 				}
+
+				//pp.Println(env)
+				//printBody += ","
 			}
 		}
 
-		env.addBody(fmt.Sprintf("printf(\"%s\\n\" %s);", printBody[1:], printArgs))
+		env.putsMain(fmt.Sprintf("printf(\"%s\\n\" %s);", printBody[1:], printArgs))
 
 		n := env.next()
 		retName := fmt.Sprintf("print_ret_%d", n)
-		env.addBody(fmt.Sprintf("char* %s = \"#<undef>\";", retName))
+		env.putsMain(fmt.Sprintf("char* %s = \"#<undef>\";", retName))
 
 		env.pushRet(newRet(C_STRING, retName))
-	}
+	})
 	return env
+}
+
+func (this *environment) registFunc(name string, proc func(args []*cell, e *environment)) {
+	this.dict[name] = newDecl(DECL_FUNC, name, proc)
+}
+
+func (this *environment) registVar(name string) {
+	this.dict[name] = newDecl(DECL_VAR, name, nil)
 }
 
 func (this *environment) pushRet(r ret) {
 	this.retStack = append(this.retStack, r)
 }
 
-func (this *environment) popRet() ret {
+func (this *environment) popRet() *ret {
 	n := len(this.retStack)
+	/*
+		if n == 0 {
+			return nil
+		}
+	*/
 	ret := this.retStack[n-1]
 	this.retStack = this.retStack[:n-1]
-	return ret
+	return &ret
 }
 
 func (this *environment) next() int {
@@ -238,26 +281,39 @@ func (this *environment) nextStr() int {
 	return this.strCount
 }
 
-func (this *environment) addHeader(ir string) {
-	if this.parent != nil {
-		this.addHeaderGlobal(ir)
-	} else {
+func (this *environment) include(ir string) {
+	if this.parent == nil {
 		this.header[ir] = struct{}{}
+	} else {
+		this.include(ir)
 	}
 }
 
-func (this *environment) addFuncBody(ir string) {
-	this.funcBody += ir
-	this.funcBody += "\n"
+func (this *environment) putsPre(ir string) {
+	if this.parent == nil {
+		this.pre += ir
+		this.pre += "\n"
+	} else {
+		this.parent.putsPre(ir)
+	}
 }
 
-func (this *environment) addBody(ir string) {
-	this.body += ir
-	this.body += "\n"
+func (this *environment) putsMain(ir string) {
+	this.main += ir
+	this.main += "\n"
+	/*
+		if this.parent == nil {
+			this.main += ir
+			this.main += "\n"
+		} else {
+			this.parent.putsMain(ir)
+		}
+	*/
 }
 
 //env.dict = map[string]func([]*cell, *environment){}
-func (this *environment) find(name string) func([]*cell, *environment) {
+//func (this *environment) find(name string) func([]*cell, *environment) {
+func (this *environment) find(name string) *decl {
 	ret, contains := this.dict[name]
 	if contains {
 		return ret
@@ -270,6 +326,7 @@ func (this *environment) find(name string) func([]*cell, *environment) {
 	}
 }
 
+/*
 func (this *environment) findVar(name string) string {
 	_, contains := this.defined[name]
 	if contains {
@@ -282,20 +339,23 @@ func (this *environment) findVar(name string) string {
 		}
 	}
 }
+*/
 
 func (this *environment) print() {
 	for h, _ := range this.header {
 		fmt.Printf("#include<%s>\n", h)
 	}
-
-	fmt.Println(`
-typedef struct PAIR_ {
-	int car;
-	struct pair_ *cdr;
-} PAIR;
-	`)
+	/*
+	   	fmt.Println(`
+	   typedef struct PAIR_ {
+	   	int car;
+	   	struct pair_ *cdr;
+	   } PAIR;
+	   	`)
+	*/
+	fmt.Println(this.pre)
 	fmt.Println("int main() {")
-	fmt.Println(this.body)
+	fmt.Println(this.main)
 	fmt.Println("}")
 }
 
@@ -307,14 +367,14 @@ func emit(cell *cell, env *environment) {
 	case LISP_ATOM:
 		// value or function
 		//env.pushRet(newRet(C_FPTR, env.find(cell.value)))
-		exp := env.find(cell.value)
-		if exp != nil {
-			env.pushRet(newRetProc(exp))
-			return
-		}
-		v := env.findVar(cell.value)
-		if len(v) > 0 {
-			env.pushRet(newRet(C_VAR, v))
+		d := env.find(cell.value)
+		if d != nil {
+			switch d.typeId {
+			case DECL_FUNC:
+				env.pushRet(newRetProc("proc", d.proc, env))
+			case DECL_VAR:
+				env.pushRet(newRet(C_VAR, d.name))
+			}
 			return
 		}
 		panic("not found: " + cell.value)
@@ -339,14 +399,27 @@ func emit(cell *cell, env *environment) {
 		case "lambda":
 			localEnv := newLocalEnv(env)
 			for _, c := range cell.list[1].list {
-				localEnv.defined[c.value] = struct{}{}
+				localEnv.registVar(c.value)
 			}
 
 			emit(cell.list[2], localEnv)
-			pp.Println(localEnv)
 			n := env.next()
 			retName := fmt.Sprintf("lambda_%d", n)
-			env.pushRet(newRet(C_FPTR, retName))
+			ret := newRetProc(retName, nil, localEnv)
+			for _, c := range cell.list[1].list {
+				ret.args = append(ret.args, c.value)
+			}
+			localRet := localEnv.popRet()
+
+			env.putsPre(fmt.Sprintf("int %s(int *args){", retName))
+			for i, c := range cell.list[1].list {
+				env.putsPre(fmt.Sprintf("int %s = args[%d];", c.value, i))
+			}
+			env.putsPre(localEnv.main)
+			env.putsPre(fmt.Sprintf("return %s;", localRet.name))
+			env.putsPre("}")
+
+			env.pushRet(ret)
 			return
 		}
 		//case "progn":
@@ -355,7 +428,7 @@ func emit(cell *cell, env *environment) {
 
 	emit(cell.list[0], env)
 	proc := env.popRet()
-	exps := []ret{}
+	exps := []*ret{}
 	for _, c := range cell.list[1:] {
 		emit(c, env)
 		exps = append(exps, env.popRet())
@@ -366,12 +439,41 @@ func emit(cell *cell, env *environment) {
 		for _, c := range exps {
 			labelArgs += "," + c.name
 		}
-		env.addBody(proc.name + "(" + labelArgs[1:] + ");")
+		env.putsMain(proc.name + "(" + labelArgs[1:] + ");")
 	} else if proc.typeId == C_PROC {
-		pp.Println(env.dict)
-		pp.Println(env.defined)
-		pp.Println(env.retStack)
-		panic("proc")
+		if proc.name == "proc" {
+			// proc
+
+			for _, e := range exps {
+				env.retStack = append([]ret{*e}, env.retStack...)
+			}
+			proc.proc(cell.list[1:], env)
+		} else {
+			// lambda
+			/*
+				ret := proc.env.popRet()
+
+				env.putsPre(fmt.Sprintf("int %s(int *args){", proc.name))
+				for i, name := range proc.args {
+					env.putsPre(fmt.Sprintf("int %s = args[%d];", name, i))
+				}
+				env.putsPre(proc.env.main)
+				env.putsPre(fmt.Sprintf("return %s;", ret.name))
+				env.putsPre("}")
+			*/
+
+			argName := fmt.Sprintf("%s_args", proc.name)
+			env.putsMain(fmt.Sprintf("int %s[] = {", argName)) // declaration
+			argCnt := ""
+			for _, e := range exps {
+				argCnt += fmt.Sprintf(",%s", e.name)
+			}
+			env.putsMain(argCnt[1:])
+			env.putsMain("};")
+			env.pushRet(newRet(C_INT, fmt.Sprintf("%s(%s)", proc.name, argName)))
+
+		}
+
 	} else {
 		panic("not a function: " + proc.name)
 	}
@@ -554,7 +656,10 @@ func main() {
 		`
 	*/
 	//code := "(progn\n (define a 10) (print (+ 100 a)))"
-	code := "((lambda (x) (+ x 1)) 10)"
+	//code := "(print ((lambda (x) (+ x 1)) 10))"
+	//code := "(print ((lambda (x) (+ x 1)) 10) ((lambda (y) (+ y 20)) 3))"
+	//code := "(print ((lambda (x) (+ x 1)) 10) ((lambda (y z) (+ y z 20)) 3 8))"
+	code := "(print (lambda (x) (+ x 1)))"
 
 	/*
 		fmt.Println(code)
