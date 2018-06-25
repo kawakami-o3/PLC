@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -109,14 +110,19 @@ func newGlobalEnv() *environment {
 		retName := fmt.Sprintf("plus_%d", n)
 		local.putsMain(fmt.Sprintf("int %s = 0;", retName))
 
-		for _, c := range args {
-			if c.isNum() {
-				local.putsMain(fmt.Sprintf("%s += %s;", retName, c.value))
-			} else {
-				emit(c, local)
-				ret := local.popRet()
-				local.putsMain(fmt.Sprintf("%s += %s;", retName, ret.name))
-			}
+		//for _, c := range args {
+		for i := 0; i < len(args); i++ {
+			ret := local.popRet()
+			local.putsMain(fmt.Sprintf("%s += %s;", retName, ret.name))
+			/*
+				if c.isNum() {
+					local.putsMain(fmt.Sprintf("%s += %s;", retName, c.value))
+				} else {
+					//emit(c, local)
+					ret := local.popRet()
+					local.putsMain(fmt.Sprintf("%s += %s;", retName, ret.name))
+				}
+			*/
 		}
 
 		local.pushRet(newRet(C_INT, retName))
@@ -186,6 +192,30 @@ func newGlobalEnv() *environment {
 			}
 		})
 	*/
+	env.registFunc("eq", func(args []*cell, e *environment) {
+		//e.include("stdbool.h")
+
+		rets := []*ret{}
+		for i := 0; i < len(args); i++ {
+			//emit(c, e)
+			rets = append(rets, e.popRet())
+		}
+
+		first := rets[0].name
+		exps := []string{}
+		for _, r := range rets[1:] {
+			exps = append(exps, fmt.Sprintf("%s == %s", first, r.name))
+		}
+
+		n := e.next()
+		retName := fmt.Sprintf("eq_%d", n)
+
+		//e.putsMain(fmt.Sprintf("bool %s = (", retName))
+		e.putsMain(fmt.Sprintf("int %s = (", retName))
+		e.putsMain(strings.Join(exps, " && "))
+		e.putsMain(");")
+		e.pushRet(newRet(C_INT, retName))
+	})
 	env.registFunc("progn", func(args []*cell, e *environment) {
 		// return integer now.
 
@@ -224,7 +254,7 @@ func newGlobalEnv() *environment {
 					emit(c, env)
 				*/
 
-				ret := env.popRet()
+				ret := e.popRet()
 				if ret.isInt() {
 					printArgs += fmt.Sprintf(", %s", ret.name)
 					printBody += " %d"
@@ -237,13 +267,13 @@ func newGlobalEnv() *environment {
 			}
 		}
 
-		env.putsMain(fmt.Sprintf("printf(\"%s\\n\" %s);", printBody[1:], printArgs))
+		e.putsMain(fmt.Sprintf("printf(\"%s\\n\" %s);", printBody[1:], printArgs))
 
-		n := env.next()
+		n := e.next()
 		retName := fmt.Sprintf("print_ret_%d", n)
-		env.putsMain(fmt.Sprintf("char* %s = \"#<undef>\";", retName))
+		e.putsMain(fmt.Sprintf("char* %s = \"#<undef>\";", retName))
 
-		env.pushRet(newRet(C_STRING, retName))
+		e.pushRet(newRet(C_STRING, retName))
 	})
 	return env
 }
@@ -397,6 +427,7 @@ func emit(cell *cell, env *environment) {
 			} else {
 		*/
 		switch head {
+		case "if":
 		case "define":
 			//args := cell.list[1:]
 			label := cell.list[1]
@@ -694,11 +725,19 @@ func main() {
 	// lambda
 	//code := "(print ((lambda (x) (+ x 1)) 10))"
 	//code := "(print ((lambda (x) (+ x 1)) 10) ((lambda (y) (+ y 20)) 3))"
-	code := "(print ((lambda (x) (+ x 1)) 10) ((lambda (y z) (+ y z 20)) 3 8))"
+	//code := "(print ((lambda (x) (+ x 1)) 10) ((lambda (y z) (+ y z 20)) 3 8))"
 
 	// define lambda
 	//code := "(define fact 10)" // define function -> special form
 	//code := "(progn (define fact (lambda (x) (+ x 1))) (print (fact 10)))"
+
+	// eq
+	//code := "(print (eq 1 1))"
+	//code := "(print (eq 1 0))"
+	//code := "(print (eq 1 1 (+ 1 3)))"
+
+	// if
+	code := "(print (if (eq 1 1) 1 0))"
 
 	/*
 		fmt.Println(code)
