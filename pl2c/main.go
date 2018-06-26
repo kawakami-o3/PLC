@@ -127,6 +127,20 @@ func newGlobalEnv() *environment {
 
 		local.pushRet(newRet(C_INT, retName))
 	})
+	env.registFunc("-", func(args []*cell, local *environment) {
+		n := local.next()
+		retName := fmt.Sprintf("minus_%d", n)
+		ret := local.popRet()
+		local.putsMain(fmt.Sprintf("int %s = %s;", retName, ret.name))
+
+		//for _, c := range args {
+		for i := 1; i < len(args); i++ {
+			ret := local.popRet()
+			local.putsMain(fmt.Sprintf("%s -= %s;", retName, ret.name))
+		}
+
+		local.pushRet(newRet(C_INT, retName))
+	})
 	env.registFunc("atom", func(args []*cell, e *environment) {
 		if len(args) != 1 {
 			panic("atom: invalid arguments")
@@ -153,45 +167,6 @@ func newGlobalEnv() *environment {
 		}
 		env.pushRet(newRet(C_INT, retName))
 	})
-	/*
-		env.dict["lambda"] = func(args []*cell, e *environment) {
-			n := env.next()
-			retName := fmt.Sprintf("lambda_%d", n)
-			env.pushRet(newRet(C_FPTR, retName))
-		}
-	*/
-
-	/*
-		env.registFunc("define", func(args []*cell, e *environment) {
-			if args[0].isAtom() {
-				// variable
-				// simple assignment, When a variable is already declared.
-
-				if !args[1].isNum() {
-					panic("expected number as value")
-				}
-				retName := args[0].value
-				value := args[1].value
-
-				d := env.find(retName)
-				if d == nil {
-					env.registVar(retName)
-					// expect INT
-					env.putsMain(fmt.Sprintf("int %s = %s;", retName, value))
-				} else {
-					env.putsMain(fmt.Sprintf("%s = %s;", retName, value))
-				}
-
-				// maybe need care about a collision with system variables,
-				// especially in case of invalid type.
-				env.pushRet(newRet(C_STRING, retName))
-
-				panic("hoge")
-			} else {
-				panic("")
-			}
-		})
-	*/
 	env.registFunc("eq", func(args []*cell, e *environment) {
 		//e.include("stdbool.h")
 
@@ -215,27 +190,6 @@ func newGlobalEnv() *environment {
 		e.putsMain(strings.Join(exps, " && "))
 		e.putsMain(");")
 		e.pushRet(newRet(C_INT, retName))
-	})
-	env.registFunc("progn", func(args []*cell, e *environment) {
-		// return integer now.
-
-		var r *ret
-		for _, c := range args {
-			emit(c, env)
-			r = env.popRet()
-		}
-
-		n := env.next()
-		retName := fmt.Sprintf("progn_%d", n)
-
-		if r.isInt() {
-			env.putsMain(fmt.Sprintf("int %s = %s;", retName, r.name))
-		} else {
-			// FIXME
-			env.putsMain(fmt.Sprintf("int %s = 0;", retName))
-		}
-
-		env.pushRet(newRet(C_INT, retName))
 	})
 	env.registFunc("print", func(args []*cell, e *environment) {
 		e.include("stdio.h")
@@ -402,7 +356,7 @@ func emit(cell *cell, env *environment) {
 		if d != nil {
 			switch d.typeId {
 			case DECL_FUNC:
-				env.pushRet(newRetProc("proc", d.proc, env))
+				env.pushRet(newRetProc(d.name, d.proc, env))
 			case DECL_VAR:
 				env.pushRet(newRet(C_VAR, d.name))
 			}
@@ -428,6 +382,45 @@ func emit(cell *cell, env *environment) {
 		*/
 		switch head {
 		case "if":
+			n := env.next()
+			retName := fmt.Sprintf("if_%d", n)
+			env.putsMain(fmt.Sprintf("int %s;", retName))
+
+			emit(cell.list[1], env)
+			cnd := env.popRet()
+
+			env.putsMain(fmt.Sprintf("if (%s) {", cnd.name))
+			emit(cell.list[2], env)
+			tRet := env.popRet()
+			env.putsMain(fmt.Sprintf("%s = %s;", retName, tRet.name))
+			env.putsMain("} else {")
+			emit(cell.list[3], env)
+			fRet := env.popRet()
+			env.putsMain(fmt.Sprintf("%s = %s;", retName, fRet.name))
+			env.putsMain("}")
+
+			env.pushRet(newRet(C_INT, retName))
+
+			return
+		case "progn":
+			var r *ret
+			for _, c := range cell.list[1:] {
+				emit(c, env)
+				r = env.popRet()
+			}
+
+			n := env.next()
+			retName := fmt.Sprintf("progn_%d", n)
+
+			if r.isInt() {
+				env.putsMain(fmt.Sprintf("int %s = %s;", retName, r.name))
+			} else {
+				// FIXME
+				env.putsMain(fmt.Sprintf("int %s = 0;", retName))
+			}
+
+			env.pushRet(newRet(C_INT, retName))
+			return
 		case "define":
 			//args := cell.list[1:]
 			label := cell.list[1]
@@ -435,17 +428,25 @@ func emit(cell *cell, env *environment) {
 			if body.typeId == LISP_LIST && len(body.list) > 0 && body.list[0].value == "lambda" {
 
 				retName := label.value
-				emit(body, env)
-				bodyRet := env.popRet()
-
 				d := env.find(retName)
 				if d == nil {
 					env.registFunc(retName, nil) // need body?
-					// expect INT
-					env.putsMain(fmt.Sprintf("int (*%s)(int*) = %s;", retName, bodyRet.name))
-				} else {
-					env.putsMain(fmt.Sprintf("%s = %s;", retName, bodyRet.name))
 				}
+
+				env.putsPre(fmt.Sprintf("int (*%s)(int*);", retName))
+				emit(body, env)
+				bodyRet := env.popRet()
+				env.putsMain(fmt.Sprintf("%s = %s;", retName, bodyRet.name))
+
+				/*
+					if d == nil {
+						// expect INT
+						//env.putsMain(fmt.Sprintf("int (*%s)(int*) = %s;", retName, bodyRet.name))
+						env.putsPre(fmt.Sprintf("int (*%s)(int*) = %s;", retName, bodyRet.name))
+					} else {
+						env.putsMain(fmt.Sprintf("%s = %s;", retName, bodyRet.name))
+					}
+				*/
 				env.pushRet(newRet(C_STRING, retName))
 
 			} else if body.isNum() {
@@ -514,13 +515,12 @@ func emit(cell *cell, env *environment) {
 		}
 		env.putsMain(proc.name + "(" + labelArgs[1:] + ");")
 	} else if proc.typeId == C_PROC {
-		if proc.name == "proc" {
+		//if proc.name == "proc" {
+		if proc.proc != nil {
 			// proc
-
 			for _, e := range exps {
 				env.retStack = append([]ret{*e}, env.retStack...)
 			}
-			//pp.Println(proc)
 			proc.proc(cell.list[1:], env)
 		} else {
 			// lambda
@@ -536,7 +536,8 @@ func emit(cell *cell, env *environment) {
 				env.putsPre("}")
 			*/
 
-			argName := fmt.Sprintf("%s_args", proc.name)
+			n := env.next()
+			argName := fmt.Sprintf("%s_args_%d", proc.name, n)
 			env.putsMain(fmt.Sprintf("int %s[] = {", argName)) // declaration
 			argCnt := ""
 			for _, e := range exps {
@@ -737,7 +738,9 @@ func main() {
 	//code := "(print (eq 1 1 (+ 1 3)))"
 
 	// if
-	code := "(print (if (eq 1 1) 1 0))"
+	//code := "(print (if (eq 1 1) 1 0))"
+	//code := "(progn (define fib (lambda (n) (if (eq n 0) 1 (if (eq n 1) 1 (+ (fib (- n 1)) (fib (- n 2))))))) (print (fib 1)))"
+	code := "(progn (define fib (lambda (n) (if (eq n 0) 1 (if (eq n 1) 1 (+ (fib (- n 1)) (fib (- n 2))))))) (print (fib 2)) (print (fib 3)) (print (fib 4)) (print (fib 5)) (print (fib 6)))"
 
 	/*
 		fmt.Println(code)
