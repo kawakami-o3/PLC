@@ -72,10 +72,7 @@ func newDecl(typeId int, name string, proc func([]*cell, *environment)) *decl {
 
 type environment struct {
 	parent *environment
-	/*
-		dictFunc   map[string]func([]*cell, *environment)
-		dictVar  map[string]struct{}
-	*/
+
 	dict map[string]*decl
 
 	// not yet shared in an environment tree.
@@ -93,8 +90,6 @@ func newLocalEnv(parent *environment) *environment {
 	env := &environment{}
 	env.parent = parent
 
-	//env.dictFunc = map[string]func([]*cell, *environment){}
-	//env.dictVar = make(map[string]struct{})
 	env.dict = map[string]*decl{}
 
 	env.count = 0
@@ -116,19 +111,9 @@ func newGlobalEnv() *environment {
 		retName := fmt.Sprintf("plus_%d", n)
 		local.putsMain(fmt.Sprintf("int %s = 0;", retName))
 
-		//for _, c := range args {
 		for i := 0; i < len(args); i++ {
 			ret := local.popRet()
 			local.putsMain(fmt.Sprintf("%s += %s;", retName, ret.name))
-			/*
-				if c.isNum() {
-					local.putsMain(fmt.Sprintf("%s += %s;", retName, c.value))
-				} else {
-					//emit(c, local)
-					ret := local.popRet()
-					local.putsMain(fmt.Sprintf("%s += %s;", retName, ret.name))
-				}
-			*/
 		}
 
 		local.pushRet(newRet(C_INT, retName))
@@ -139,7 +124,6 @@ func newGlobalEnv() *environment {
 		ret := local.popRet()
 		local.putsMain(fmt.Sprintf("int %s = %s;", retName, ret.name))
 
-		//for _, c := range args {
 		for i := 1; i < len(args); i++ {
 			ret := local.popRet()
 			local.putsMain(fmt.Sprintf("%s -= %s;", retName, ret.name))
@@ -178,7 +162,6 @@ func newGlobalEnv() *environment {
 
 		rets := []*ret{}
 		for i := 0; i < len(args); i++ {
-			//emit(c, e)
 			rets = append(rets, e.popRet())
 		}
 
@@ -254,10 +237,6 @@ func newGlobalEnv() *environment {
 				printArgs += fmt.Sprintf(", %s", c.value)
 				printBody += " %d"
 			} else {
-				/*
-					emit(c, env)
-				*/
-
 				ret := e.popRet()
 				if ret.isInt() {
 					printArgs += fmt.Sprintf(", %s", ret.name)
@@ -304,11 +283,6 @@ func (this *environment) pushRet(r ret) {
 
 func (this *environment) popRet() *ret {
 	n := len(this.retStack)
-	/*
-		if n == 0 {
-			return nil
-		}
-	*/
 	ret := this.retStack[n-1]
 	this.retStack = this.retStack[:n-1]
 	return &ret
@@ -344,18 +318,8 @@ func (this *environment) putsPre(ir string) {
 func (this *environment) putsMain(ir string) {
 	this.main += ir
 	this.main += "\n"
-	/*
-		if this.parent == nil {
-			this.main += ir
-			this.main += "\n"
-		} else {
-			this.parent.putsMain(ir)
-		}
-	*/
 }
 
-//env.dict = map[string]func([]*cell, *environment){}
-//func (this *environment) find(name string) func([]*cell, *environment) {
 func (this *environment) find(name string) *decl {
 	ret, contains := this.dict[name]
 	if contains {
@@ -368,21 +332,6 @@ func (this *environment) find(name string) *decl {
 		}
 	}
 }
-
-/*
-func (this *environment) findVar(name string) string {
-	_, contains := this.defined[name]
-	if contains {
-		return name
-	} else {
-		if this.parent == nil {
-			panic("not found: " + name)
-		} else {
-			return this.parent.findVar(name)
-		}
-	}
-}
-*/
 
 func (this *environment) print() {
 	for h, _ := range this.header {
@@ -409,7 +358,6 @@ func emit(cell *cell, env *environment) {
 		return
 	case LISP_ATOM:
 		// value or function
-		//env.pushRet(newRet(C_FPTR, env.find(cell.value)))
 		d := env.find(cell.value)
 		if d != nil {
 			switch d.typeId {
@@ -420,24 +368,8 @@ func emit(cell *cell, env *environment) {
 			}
 			return
 		}
-		//panic("not found: " + cell.value)
-
-		//env.pushRet(newRet(C_INT, cell.value))
-		//return
 	case LISP_LIST:
 		head := cell.list[0].value
-		/*
-			if head.typeId == LISP_ATOM {
-				emitter := env.dict[cell.list[0].value]
-				if emitter == nil {
-					fmt.Println("-", cell.list[0].value, "-")
-					panic("")
-				}
-
-				emitter(cell.list[1:], env)
-				return
-			} else {
-		*/
 		switch head {
 		case "quote":
 			// int and flat int array are implemented. The other raises panic.
@@ -521,17 +453,7 @@ func emit(cell *cell, env *environment) {
 				bodyRet := env.popRet()
 				env.putsMain(fmt.Sprintf("%s = %s;", retName, bodyRet.name))
 
-				/*
-					if d == nil {
-						// expect INT
-						//env.putsMain(fmt.Sprintf("int (*%s)(int*) = %s;", retName, bodyRet.name))
-						env.putsPre(fmt.Sprintf("int (*%s)(int*) = %s;", retName, bodyRet.name))
-					} else {
-						env.putsMain(fmt.Sprintf("%s = %s;", retName, bodyRet.name))
-					}
-				*/
 				env.pushRet(newRet(C_STRING, retName))
-
 			} else if body.isNum() {
 				retName := label.value
 				value := body.value
@@ -606,19 +528,6 @@ func emit(cell *cell, env *environment) {
 			}
 			proc.proc(cell.list[1:], env)
 		} else {
-			// lambda
-			/*
-				ret := proc.env.popRet()
-
-				env.putsPre(fmt.Sprintf("int %s(int *args){", proc.name))
-				for i, name := range proc.args {
-					env.putsPre(fmt.Sprintf("int %s = args[%d];", name, i))
-				}
-				env.putsPre(proc.env.main)
-				env.putsPre(fmt.Sprintf("return %s;", ret.name))
-				env.putsPre("}")
-			*/
-
 			n := env.next()
 			argName := fmt.Sprintf("%s_args_%d", proc.name, n)
 			env.putsMain(fmt.Sprintf("int %s[] = {", argName)) // declaration
@@ -629,7 +538,6 @@ func emit(cell *cell, env *environment) {
 			env.putsMain(argCnt[1:])
 			env.putsMain("};")
 			env.pushRet(newRet(C_INT, fmt.Sprintf("%s(%s)", proc.name, argName)))
-
 		}
 
 	} else {
@@ -653,14 +561,7 @@ type cell struct {
 	proc func(*cell) *cell
 }
 
-//func newAtom(token string) (*cell, error) {
 func newAtom(token string) *cell {
-	/*
-		v, err := strconv.Atoi(token)
-		if err != nil {
-			return nil, err
-		}
-	*/
 	return &cell{
 		typeId: LISP_ATOM,
 		value:  token,
@@ -783,16 +684,6 @@ func readFrom(buf *TokenBuffer) (*cell, error) {
 	}
 }
 
-/*
-func parse(code string) *cell {
-	cell, err := readFrom(tokenize(code))
-	if err != nil {
-		panic(err)
-	}
-	return cell
-}
-*/
-
 func main() {
 	//code := "(+ 1 (- 3 2))\n(+ 1 (- 3 2))"
 	//code := "(+ 1 (- 3 2))"
@@ -833,12 +724,6 @@ func main() {
 	//code := "(print (cdr (quote (1 2 3))))"
 	//code := "(print (cons 2 1))"
 	code := "(print (cons 2 (quote (1 3))))"
-
-	/*
-		fmt.Println(code)
-		fmt.Println(parse(code).str())
-		fmt.Println(compile(code))
-	*/
 
 	cell, err := readFrom(tokenize(code))
 	if err != nil {
