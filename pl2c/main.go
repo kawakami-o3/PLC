@@ -193,6 +193,29 @@ func newGlobalEnv() *environment {
 		e.putsMain(");")
 		e.pushRet(newRet(C_INT, retName))
 	})
+	env.registFunc("car", func(args []*cell, e *environment) {
+		arg := e.popRet()
+
+		n := e.next()
+		retName := fmt.Sprintf("car_%d", n)
+		e.putsMain(fmt.Sprintf("int %s = %s[0];", retName, arg.name))
+		e.pushRet(newRet(C_INT, retName))
+	})
+	env.registFunc("cdr", func(args []*cell, e *environment) {
+		arg := e.popRet()
+
+		n := e.next()
+		retName := fmt.Sprintf("cdr_%d", n)
+
+		arrBody := ""
+		for i := 1; i < arg.length; i++ {
+			arrBody += fmt.Sprintf(",%s[%d]", arg.name, i)
+		}
+		e.putsMain(fmt.Sprintf("int %s[] = {%s};", retName, arrBody[1:]))
+		e.pushRet(newRet(C_INT, retName))
+	})
+	env.registFunc("cons", func(args []*cell, e *environment) {
+	})
 	env.registFunc("print", func(args []*cell, e *environment) {
 		e.include("stdio.h")
 
@@ -779,7 +802,9 @@ func main() {
 
 	// quote
 	//code := "(print (quote 1))"
-	code := "(print (quote (1 2 3)))"
+	//code := "(print (quote (1 2 3)))"
+	//code := "(print (car (quote (1 2 3))))"
+	code := "(print (car (cdr (quote (1 2 3)))))"
 
 	/*
 		fmt.Println(code)
