@@ -39,6 +39,10 @@ func newRetProc(name string, proc func([]*cell, *environment), env *environment)
 	return ret{C_PROC, name, proc, env, []string{}, 0}
 }
 
+func newRetArr(name string, length int) ret {
+	return ret{C_ARRAY, name, nil, nil, []string{}, length}
+}
+
 func (this ret) isInt() bool {
 	return this.typeId == C_INT
 }
@@ -211,10 +215,31 @@ func newGlobalEnv() *environment {
 		for i := 1; i < arg.length; i++ {
 			arrBody += fmt.Sprintf(",%s[%d]", arg.name, i)
 		}
-		e.putsMain(fmt.Sprintf("int %s[] = {%s};", retName, arrBody[1:]))
-		e.pushRet(newRet(C_INT, retName))
+		arrBody = arrBody[1:]
+
+		e.putsMain(fmt.Sprintf("int %s[] = {%s};", retName, arrBody))
+		e.pushRet(newRetArr(retName, arg.length-1))
 	})
 	env.registFunc("cons", func(args []*cell, e *environment) {
+		elm := e.popRet()
+		rest := e.popRet()
+
+		arrBody := elm.name
+		length := 1
+		if rest.isArray() {
+			for i := 0; i < rest.length; i++ {
+				arrBody += fmt.Sprintf(", %s[%d]", rest.name, i)
+			}
+			length += rest.length
+		} else {
+			arrBody += ", " + rest.name
+			length++
+		}
+
+		n := e.next()
+		retName := fmt.Sprintf("cons_%d", n)
+		e.putsMain(fmt.Sprintf("int %s[] = {%s};", retName, arrBody))
+		e.pushRet(newRetArr(retName, length))
 	})
 	env.registFunc("print", func(args []*cell, e *environment) {
 		e.include("stdio.h")
@@ -804,7 +829,10 @@ func main() {
 	//code := "(print (quote 1))"
 	//code := "(print (quote (1 2 3)))"
 	//code := "(print (car (quote (1 2 3))))"
-	code := "(print (car (cdr (quote (1 2 3)))))"
+	//code := "(print (car (cdr (quote (1 2 3)))))"
+	//code := "(print (cdr (quote (1 2 3))))"
+	//code := "(print (cons 2 1))"
+	code := "(print (cons 2 (quote (1 3))))"
 
 	/*
 		fmt.Println(code)
