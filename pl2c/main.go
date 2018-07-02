@@ -27,14 +27,16 @@ type ret struct {
 	proc   func([]*cell, *environment)
 	env    *environment
 	args   []string
+
+	length int // for 'quote' and 'print'
 }
 
 func newRet(typeId int, name string) ret {
-	return ret{typeId, name, nil, nil, []string{}}
+	return ret{typeId, name, nil, nil, []string{}, 0}
 }
 
 func newRetProc(name string, proc func([]*cell, *environment), env *environment) ret {
-	return ret{C_PROC, name, proc, env, []string{}}
+	return ret{C_PROC, name, proc, env, []string{}, 0}
 }
 
 func (this ret) isInt() bool {
@@ -215,6 +217,14 @@ func newGlobalEnv() *environment {
 				} else if ret.isString() {
 					printArgs += fmt.Sprintf(", %s", ret.name)
 					printBody += " %s"
+				} else if ret.isArray() {
+
+					printBody += " ("
+					for i := 0; i < ret.length; i++ {
+						printArgs += fmt.Sprintf(", %s[%d]", ret.name, i)
+						printBody += " %d"
+					}
+					printBody += " )"
 				} else {
 					panic("")
 				}
@@ -381,6 +391,31 @@ func emit(cell *cell, env *environment) {
 			} else {
 		*/
 		switch head {
+		case "quote":
+			// int and flat int array are implemented. The other raises panic.
+			n := env.next()
+			retName := fmt.Sprintf("quote_%d", n)
+
+			if len(cell.list) > 2 {
+				panic("quote: too many arguments")
+			}
+
+			if cell.list[1].typeId == LISP_LIST {
+				arrBody := ""
+				for _, i := range cell.list[1].list {
+					arrBody += "," + i.value
+				}
+				env.putsMain(fmt.Sprintf("int %s[] = { %s };", retName, arrBody[1:]))
+
+				ret := newRet(C_ARRAY, retName)
+				ret.length = len(cell.list[1].list)
+
+				env.pushRet(ret)
+			} else {
+				env.putsMain(fmt.Sprintf("int %s = %s;", retName, cell.list[1].value))
+				env.pushRet(newRet(C_INT, retName))
+			}
+			return
 		case "if":
 			n := env.next()
 			retName := fmt.Sprintf("if_%d", n)
@@ -740,7 +775,11 @@ func main() {
 	// if
 	//code := "(print (if (eq 1 1) 1 0))"
 	//code := "(progn (define fib (lambda (n) (if (eq n 0) 1 (if (eq n 1) 1 (+ (fib (- n 1)) (fib (- n 2))))))) (print (fib 1)))"
-	code := "(progn (define fib (lambda (n) (if (eq n 0) 1 (if (eq n 1) 1 (+ (fib (- n 1)) (fib (- n 2))))))) (print (fib 2)) (print (fib 3)) (print (fib 4)) (print (fib 5)) (print (fib 6)))"
+	//code := "(progn (define fib (lambda (n) (if (eq n 0) 1 (if (eq n 1) 1 (+ (fib (- n 1)) (fib (- n 2))))))) (print (fib 2)) (print (fib 3)) (print (fib 4)) (print (fib 5)) (print (fib 6)))"
+
+	// quote
+	//code := "(print (quote 1))"
+	code := "(print (quote (1 2 3)))"
 
 	/*
 		fmt.Println(code)
