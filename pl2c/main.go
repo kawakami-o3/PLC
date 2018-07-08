@@ -3,9 +3,27 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"strconv"
 	"strings"
 )
+
+func readFile(filename string) string {
+	//file, err := os.Open("templates/common.c")
+	file, err := os.Open(filename)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	bytes, err := ioutil.ReadAll(file)
+	if err != nil {
+		panic(err)
+	}
+
+	return string(bytes)
+}
 
 const (
 	C_INT = iota
@@ -109,12 +127,20 @@ func newGlobalEnv() *environment {
 	env.registFunc("+", func(args []*cell, local *environment) {
 		n := local.next()
 		retName := fmt.Sprintf("plus_%d", n)
-		local.putsMain(fmt.Sprintf("int %s = 0;", retName))
+		argsName := fmt.Sprintf("args_%d", n)
 
+		consArgs := ""
 		for i := 0; i < len(args); i++ {
 			ret := local.popRet()
-			local.putsMain(fmt.Sprintf("%s += %s;", retName, ret.name))
+			consArgs += fmt.Sprintf("cons(%s, ", ret.name)
 		}
+		consArgs += "Nil"
+		for i := 0; i < len(args); i++ {
+			consArgs += ")"
+		}
+		local.putsMain(fmt.Sprintf("List *%s = %s;", argsName, consArgs))
+
+		local.putsMain(fmt.Sprintf("List *%s = add(%s);", retName, argsName))
 
 		local.pushRet(newRet(C_INT, retName))
 	})
@@ -239,7 +265,7 @@ func newGlobalEnv() *environment {
 			} else {
 				ret := e.popRet()
 				if ret.isInt() {
-					printArgs += fmt.Sprintf(", %s", ret.name)
+					printArgs += fmt.Sprintf(", %s->atom->i", ret.name)
 					printBody += " %d"
 				} else if ret.isString() {
 					printArgs += fmt.Sprintf(", %s", ret.name)
@@ -345,8 +371,12 @@ func (this *environment) print() {
 	   } PAIR;
 	   	`)
 	*/
+
+	fmt.Println(readFile("templates/common.c"))
+
 	fmt.Println(this.pre)
 	fmt.Println("int main() {")
+	fmt.Println("init_common();")
 	fmt.Println(this.main)
 	fmt.Println("}")
 }
@@ -354,7 +384,10 @@ func (this *environment) print() {
 func emit(cell *cell, env *environment) {
 	switch cell.typeId {
 	case LISP_NUM:
-		env.pushRet(newRet(C_INT, cell.value))
+		n := env.next()
+		retName := fmt.Sprintf("num_%d", n)
+		env.putsMain(fmt.Sprintf("List *%s = make_int(%s);", retName, cell.value))
+		env.pushRet(newRet(C_INT, retName))
 		return
 	case LISP_ATOM:
 		// value or function
@@ -690,7 +723,7 @@ func main() {
 	//code := "(+ 1 2)"
 	//code := "(print (print 1 2 3 4) (print 3 5 5))"
 	//code := "(print (atom 4) (atom (print 3)))"
-	//code := "(print (+ 1 2))"
+	code := "(print (+ 1 2))"
 	//code := "(print (+ 3 (+ 1 2)))"
 	//code := "(print (+ 3 (+ 1 2) 8))" // FIXME raise compile error
 	//code := "(print (+ 3 (+ 1 2) 8)))"
@@ -723,7 +756,7 @@ func main() {
 	//code := "(print (car (cdr (quote (1 2 3)))))"
 	//code := "(print (cdr (quote (1 2 3))))"
 	//code := "(print (cons 2 1))"
-	code := "(print (cons 2 (quote (1 3))))"
+	//code := "(print (cons 2 (quote (1 3))))"
 
 	cell, err := readFrom(tokenize(code))
 	if err != nil {
