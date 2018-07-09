@@ -497,9 +497,9 @@ func emit(cell *cell, env *environment) {
 				if d == nil {
 					env.registVar(retName)
 					// expect INT
-					env.putsMain(fmt.Sprintf("int %s = %s;", retName, value))
+					env.putsMain(fmt.Sprintf("List *%s = make_int(%s);", retName, value))
 				} else {
-					env.putsMain(fmt.Sprintf("%s = %s;", retName, value))
+					env.putsMain(fmt.Sprintf("%s = make_int(%s);", retName, value))
 				}
 
 				// maybe need care about a collision with system variables,
@@ -673,7 +673,7 @@ func tokenize(code string) *TokenBuffer {
 	tokens := []string{}
 	t := ""
 	for _, c := range code {
-		if c == '\n' {
+		if c == '\n' || c == '\t' {
 			c = ' '
 		}
 		if c == ' ' && len(t) > 0 {
