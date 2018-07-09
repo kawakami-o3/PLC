@@ -215,14 +215,14 @@ func newGlobalEnv() *environment {
 		first := rets[0].name
 		exps := []string{}
 		for _, r := range rets[1:] {
-			exps = append(exps, fmt.Sprintf("%s == %s", first, r.name))
+			exps = append(exps, fmt.Sprintf("%s->atom->i == %s->atom->i", first, r.name))
 		}
 
 		n := e.next()
 		retName := fmt.Sprintf("eq_%d", n)
 
 		//e.putsMain(fmt.Sprintf("bool %s = (", retName))
-		e.putsMain(fmt.Sprintf("int %s = (", retName))
+		e.putsMain(fmt.Sprintf("List *%s = make_int(", retName))
 		e.putsMain(strings.Join(exps, " && "))
 		e.putsMain(");")
 		e.pushRet(newRet(C_INT, retName))
