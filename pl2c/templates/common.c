@@ -87,6 +87,22 @@ List *add(List *lst) {
 	return make_int(i);
 }
 
+List *sub(List *lst) {
+	List *a = lst->car;
+	List *d = lst->cdr;
+	int i = a->atom->i;
+
+	a = d->car;
+	d = d->cdr;
+	while (a != NULL) {
+		i -= a->atom->i;
+		a = d->car;
+		d = d->cdr;
+	}
+
+	return make_int(i);
+}
+
 void init_common() {
 	Nil = make_list();
 }

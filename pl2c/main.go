@@ -143,17 +143,6 @@ func newGlobalEnv() *environment {
 		retName := fmt.Sprintf("plus_%d", n)
 		argsName := fmt.Sprintf("args_%d", n)
 
-		/*
-			consArgs := ""
-			for i := 0; i < len(args); i++ {
-				ret := local.popRet()
-				consArgs += fmt.Sprintf("cons(%s, ", ret.name)
-			}
-			consArgs += "Nil"
-			for i := 0; i < len(args); i++ {
-				consArgs += ")"
-			}
-		*/
 		argNames := []string{}
 		for i := 0; i < len(args); i++ {
 			ret := local.popRet()
@@ -168,13 +157,16 @@ func newGlobalEnv() *environment {
 	env.registFunc("-", func(args []*cell, local *environment) {
 		n := local.next()
 		retName := fmt.Sprintf("minus_%d", n)
-		ret := local.popRet()
-		local.putsMain(fmt.Sprintf("int %s = %s;", retName, ret.name))
+		argsName := fmt.Sprintf("args_%d", n)
 
-		for i := 1; i < len(args); i++ {
+		argNames := []string{}
+		for i := 0; i < len(args); i++ {
 			ret := local.popRet()
-			local.putsMain(fmt.Sprintf("%s -= %s;", retName, ret.name))
+			argNames = append(argNames, ret.name)
 		}
+		local.putsMain(fmt.Sprintf("List *%s = %s;", argsName, consAll(argNames)))
+
+		local.putsMain(fmt.Sprintf("List *%s = sub(%s);", retName, argsName))
 
 		local.pushRet(newRet(C_INT, retName))
 	})
