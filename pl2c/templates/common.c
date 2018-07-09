@@ -63,6 +63,16 @@ List *cons(List *a, List *b) {
 	return lst;
 }
 
+List *nth(List *lst, int i) {
+	if (i <= 0) {
+		return lst->car;
+	}
+	if (lst->cdr == NULL) {
+		return NULL;
+	}
+	return nth(lst->cdr, i-1);
+}
+
 List *add(List *lst) {
 	int i = 0;
 

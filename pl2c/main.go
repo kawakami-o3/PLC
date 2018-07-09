@@ -123,6 +123,18 @@ func newLocalEnv(parent *environment) *environment {
 	return env
 }
 
+func consAll(names []string) string {
+	ret := ""
+	for _, n := range names {
+		ret += fmt.Sprintf("cons(%s, ", n)
+	}
+	ret += "Nil"
+	for i := 0; i < len(names); i++ {
+		ret += ")"
+	}
+	return ret
+}
+
 func newGlobalEnv() *environment {
 	env := newLocalEnv(nil)
 
@@ -131,16 +143,23 @@ func newGlobalEnv() *environment {
 		retName := fmt.Sprintf("plus_%d", n)
 		argsName := fmt.Sprintf("args_%d", n)
 
-		consArgs := ""
+		/*
+			consArgs := ""
+			for i := 0; i < len(args); i++ {
+				ret := local.popRet()
+				consArgs += fmt.Sprintf("cons(%s, ", ret.name)
+			}
+			consArgs += "Nil"
+			for i := 0; i < len(args); i++ {
+				consArgs += ")"
+			}
+		*/
+		argNames := []string{}
 		for i := 0; i < len(args); i++ {
 			ret := local.popRet()
-			consArgs += fmt.Sprintf("cons(%s, ", ret.name)
+			argNames = append(argNames, ret.name)
 		}
-		consArgs += "Nil"
-		for i := 0; i < len(args); i++ {
-			consArgs += ")"
-		}
-		local.putsMain(fmt.Sprintf("List *%s = %s;", argsName, consArgs))
+		local.putsMain(fmt.Sprintf("List *%s = %s;", argsName, consAll(argNames)))
 
 		local.putsMain(fmt.Sprintf("List *%s = add(%s);", retName, argsName))
 
@@ -253,7 +272,7 @@ func newGlobalEnv() *environment {
 		e.pushRet(newRetArr(retName, length))
 	})
 	env.registFunc("print", func(args []*cell, e *environment) {
-		e.include("stdio.h")
+		//e.include("stdio.h")
 
 		printArgs := ""
 		printBody := ""
@@ -483,7 +502,7 @@ func emit(cell *cell, env *environment) {
 					env.registFunc(retName, nil) // need body?
 				}
 
-				env.putsPre(fmt.Sprintf("int (*%s)(int*);", retName))
+				env.putsPre(fmt.Sprintf("List *(*%s)(List*);", retName))
 				emit(body, env)
 				bodyRet := env.popRet()
 				env.putsMain(fmt.Sprintf("%s = %s;", retName, bodyRet.name))
@@ -525,9 +544,9 @@ func emit(cell *cell, env *environment) {
 			}
 			localRet := localEnv.popRet()
 
-			env.putsPre(fmt.Sprintf("int %s(int *args){", retName))
+			env.putsPre(fmt.Sprintf("List *%s(List *args){", retName))
 			for i, c := range cell.list[1].list {
-				env.putsPre(fmt.Sprintf("int %s = args[%d];", c.value, i))
+				env.putsPre(fmt.Sprintf("List *%s = nth(args, %d);", c.value, i))
 			}
 			env.putsPre(localEnv.main)
 			env.putsPre(fmt.Sprintf("return %s;", localRet.name))
@@ -565,13 +584,21 @@ func emit(cell *cell, env *environment) {
 		} else {
 			n := env.next()
 			argName := fmt.Sprintf("%s_args_%d", proc.name, n)
-			env.putsMain(fmt.Sprintf("int %s[] = {", argName)) // declaration
-			argCnt := ""
+			expNames := []string{}
 			for _, e := range exps {
-				argCnt += fmt.Sprintf(",%s", e.name)
+				expNames = append(expNames, e.name)
 			}
-			env.putsMain(argCnt[1:])
-			env.putsMain("};")
+
+			env.putsMain(fmt.Sprintf("List *%s = %s;", argName, consAll(expNames))) // declaration
+			/*
+				env.putsMain(fmt.Sprintf("List *%s[] = {", argName)) // declaration
+				argCnt := ""
+				for _, e := range exps {
+					argCnt += fmt.Sprintf(",%s", e.name)
+				}
+				env.putsMain(argCnt[1:])
+				env.putsMain("};")
+			*/
 			env.pushRet(newRet(C_INT, fmt.Sprintf("%s(%s)", proc.name, argName)))
 		}
 
