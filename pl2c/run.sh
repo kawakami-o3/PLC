@@ -2,7 +2,8 @@ set -x
 rm -f __test.c
 grep '\tcode' main.go
 goimports -w *.go
-go build -o __pl2c.exe && ./__pl2c.exe > __test.c && cat __test.c
+#go build -o __pl2c.exe && ./__pl2c.exe > __test.c && cat __test.c
+go build -o __pl2c.exe && ./__pl2c.exe ../test/add_0.lisp > __test.c && cat __test.c
 
 #go build -o __pl2c.exe && ./__pl2c.exe
 #go build -o __pl2c.exe
@@ -11,5 +12,5 @@ go build -o __pl2c.exe && ./__pl2c.exe > __test.c && cat __test.c
 
 
 
-gcc __test.c -o __a.exe && ./__a.exe
+#gcc __test.c -o __a.exe && ./__a.exe
 

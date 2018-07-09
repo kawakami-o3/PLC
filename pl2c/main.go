@@ -2,9 +2,11 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -723,7 +725,7 @@ func main() {
 	//code := "(+ 1 2)"
 	//code := "(print (print 1 2 3 4) (print 3 5 5))"
 	//code := "(print (atom 4) (atom (print 3)))"
-	code := "(print (+ 1 2))"
+	//code := "(print (+ 1 2))"
 	//code := "(print (+ 3 (+ 1 2)))"
 	//code := "(print (+ 3 (+ 1 2) 8))" // FIXME raise compile error
 	//code := "(print (+ 3 (+ 1 2) 8)))"
@@ -758,7 +760,14 @@ func main() {
 	//code := "(print (cons 2 1))"
 	//code := "(print (cons 2 (quote (1 3))))"
 
-	cell, err := readFrom(tokenize(code))
+	flag.Parse()
+	srcPath, err := filepath.Abs(flag.Args()[0])
+	if err != nil {
+		panic(err)
+	}
+	srcCnt := readFile(srcPath)
+
+	cell, err := readFrom(tokenize(srcCnt))
 	if err != nil {
 		panic(err)
 	}
@@ -767,5 +776,4 @@ func main() {
 	emit(cell, env)
 
 	env.print()
-
 }
