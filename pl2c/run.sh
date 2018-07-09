@@ -7,7 +7,10 @@ set -x
 #TARGET=define_lambda_0.lisp
 #TARGET=eq_0.lisp
 #TARGET=eq_1.lisp
-TARGET=eq_2.lisp
+#TARGET=eq_2.lisp
+#TARGET=if_0.lisp
+#TARGET=if_1.lisp
+TARGET=if_2.lisp
 
 rm -f __test.c
 grep '\tcode' main.go

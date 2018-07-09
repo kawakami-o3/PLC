@@ -453,12 +453,12 @@ func emit(cell *cell, env *environment) {
 		case "if":
 			n := env.next()
 			retName := fmt.Sprintf("if_%d", n)
-			env.putsMain(fmt.Sprintf("int %s;", retName))
+			env.putsMain(fmt.Sprintf("List *%s;", retName))
 
 			emit(cell.list[1], env)
 			cnd := env.popRet()
 
-			env.putsMain(fmt.Sprintf("if (%s) {", cnd.name))
+			env.putsMain(fmt.Sprintf("if (%s->atom->i) {", cnd.name))
 			emit(cell.list[2], env)
 			tRet := env.popRet()
 			env.putsMain(fmt.Sprintf("%s = %s;", retName, tRet.name))
