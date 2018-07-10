@@ -10,7 +10,16 @@ set -x
 #TARGET=eq_2.lisp
 #TARGET=if_0.lisp
 #TARGET=if_1.lisp
-TARGET=if_2.lisp
+#TARGET=if_2.lisp
+#TARGET=quote_0.lisp
+#TARGET=quote_1.lisp
+#TARGET=quote_2.lisp
+#TARGET=quote_3.lisp
+#TARGET=quote_4.lisp
+#TARGET=quote_5.lisp
+#TARGET=quote_6.lisp
+#TARGET=atom_0.lisp
+TARGET=atom_1.lisp
 
 rm -f __test.c
 grep '\tcode' main.go

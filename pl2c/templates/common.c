@@ -56,6 +56,10 @@ List *car(List *lst) {
 	return lst->car;
 }
 
+List *cdr(List *lst) {
+	return lst->cdr;
+}
+
 List *cons(List *a, List *b) {
 	List *lst = make_list();
 	lst->car = a;

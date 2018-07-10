@@ -1,0 +1,1 @@
+(print (atom 10))

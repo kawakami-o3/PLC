@@ -174,26 +174,11 @@ func newGlobalEnv() *environment {
 		if len(args) != 1 {
 			panic("atom: invalid arguments")
 		}
-		c := args[0]
-
 		n := env.next()
 		retName := fmt.Sprintf("atom_%d", n)
-		if c.isAtom() || c.isNum() || c.isNil() {
-			env.putsMain(fmt.Sprintf("int %s = 1;", retName))
-		} else {
-			emit(c, env)
+		arg := env.popRet()
 
-			ret := env.popRet()
-			if ret.isArray() {
-				// FIXME
-				// At the compile time, it is impossible to determine whether
-				// the returned value is atom or not.
-				//env.putsMain(fmt.Sprintf("int %s = 0 == ;", retName))
-				env.putsMain(fmt.Sprintf("int %s = 0;", retName))
-			} else {
-				env.putsMain(fmt.Sprintf("int %s = 1;", retName))
-			}
-		}
+		env.putsMain(fmt.Sprintf("List *%s = make_int(%s->atom != NULL);", retName, arg.name))
 		env.pushRet(newRet(C_INT, retName))
 	})
 	env.registFunc("eq", func(args []*cell, e *environment) {
@@ -224,7 +209,7 @@ func newGlobalEnv() *environment {
 
 		n := e.next()
 		retName := fmt.Sprintf("car_%d", n)
-		e.putsMain(fmt.Sprintf("int %s = %s[0];", retName, arg.name))
+		e.putsMain(fmt.Sprintf("List *%s = car(%s);", retName, arg.name))
 		e.pushRet(newRet(C_INT, retName))
 	})
 	env.registFunc("cdr", func(args []*cell, e *environment) {
@@ -233,35 +218,27 @@ func newGlobalEnv() *environment {
 		n := e.next()
 		retName := fmt.Sprintf("cdr_%d", n)
 
-		arrBody := ""
-		for i := 1; i < arg.length; i++ {
-			arrBody += fmt.Sprintf(",%s[%d]", arg.name, i)
-		}
-		arrBody = arrBody[1:]
+		/*
+			arrBody := ""
+			for i := 1; i < arg.length; i++ {
+				arrBody += fmt.Sprintf(",%s[%d]", arg.name, i)
+			}
+			arrBody = arrBody[1:]
 
-		e.putsMain(fmt.Sprintf("int %s[] = {%s};", retName, arrBody))
+			e.putsMain(fmt.Sprintf("int %s[] = {%s};", retName, arrBody))
+		*/
+		e.putsMain(fmt.Sprintf("List *%s = cdr(%s);", retName, arg.name))
 		e.pushRet(newRetArr(retName, arg.length-1))
 	})
 	env.registFunc("cons", func(args []*cell, e *environment) {
 		elm := e.popRet()
 		rest := e.popRet()
 
-		arrBody := elm.name
-		length := 1
-		if rest.isArray() {
-			for i := 0; i < rest.length; i++ {
-				arrBody += fmt.Sprintf(", %s[%d]", rest.name, i)
-			}
-			length += rest.length
-		} else {
-			arrBody += ", " + rest.name
-			length++
-		}
-
 		n := e.next()
 		retName := fmt.Sprintf("cons_%d", n)
-		e.putsMain(fmt.Sprintf("int %s[] = {%s};", retName, arrBody))
-		e.pushRet(newRetArr(retName, length))
+		//e.putsMain(fmt.Sprintf("List *%s = %s;", retName, consAll(names)))
+		e.putsMain(fmt.Sprintf("List *%s = cons(%s, %s);", retName, elm.name, rest.name))
+		e.pushRet(newRetArr(retName, 1+rest.length))
 	})
 	env.registFunc("print", func(args []*cell, e *environment) {
 		//e.include("stdio.h")
@@ -270,10 +247,10 @@ func newGlobalEnv() *environment {
 		printBody := ""
 		for _, c := range args {
 			if c.isNum() {
-				printArgs += fmt.Sprintf(", %s", c.value)
+				printArgs += fmt.Sprintf(", %s->atom->i", c.value)
 				printBody += " %d"
 			} else if c.isAtom() {
-				printArgs += fmt.Sprintf(", %s", c.value)
+				printArgs += fmt.Sprintf(", %s->atom->i", c.value)
 				printBody += " %d"
 			} else {
 				ret := e.popRet()
@@ -281,13 +258,13 @@ func newGlobalEnv() *environment {
 					printArgs += fmt.Sprintf(", %s->atom->i", ret.name)
 					printBody += " %d"
 				} else if ret.isString() {
-					printArgs += fmt.Sprintf(", %s", ret.name)
+					printArgs += fmt.Sprintf(", %s->atom->i", ret.name)
 					printBody += " %s"
 				} else if ret.isArray() {
 
 					printBody += " ("
 					for i := 0; i < ret.length; i++ {
-						printArgs += fmt.Sprintf(", %s[%d]", ret.name, i)
+						printArgs += fmt.Sprintf(", nth(%s,%d)->atom->i", ret.name, i)
 						printBody += " %d"
 					}
 					printBody += " )"
@@ -427,18 +404,29 @@ func emit(cell *cell, env *environment) {
 			}
 
 			if cell.list[1].typeId == LISP_LIST {
-				arrBody := ""
+				/*
+					arrBody := ""
+					for _, i := range cell.list[1].list {
+						arrBody += "," + i.value
+					}
+				*/
+
+				names := []string{}
 				for _, i := range cell.list[1].list {
-					arrBody += "," + i.value
+					emit(i, env)
+					r := env.popRet()
+					names = append(names, r.name)
 				}
-				env.putsMain(fmt.Sprintf("int %s[] = { %s };", retName, arrBody[1:]))
+
+				//env.putsMain(fmt.Sprintf("List *%s = %s;", retName, arrBody[1:]))
+				env.putsMain(fmt.Sprintf("List *%s = %s;", retName, consAll(names)))
 
 				ret := newRet(C_ARRAY, retName)
 				ret.length = len(cell.list[1].list)
 
 				env.pushRet(ret)
 			} else {
-				env.putsMain(fmt.Sprintf("int %s = %s;", retName, cell.list[1].value))
+				env.putsMain(fmt.Sprintf("List *%s = make_int(%s);", retName, cell.list[1].value))
 				env.pushRet(newRet(C_INT, retName))
 			}
 			return
