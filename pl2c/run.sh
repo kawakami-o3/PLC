@@ -19,7 +19,11 @@ set -x
 #TARGET=quote_5.lisp
 #TARGET=quote_6.lisp
 #TARGET=atom_0.lisp
-TARGET=atom_1.lisp
+#TARGET=atom_1.lisp
+
+# to eval
+#TARGET=quote_7.lisp
+TARGET=quote_8.lisp
 
 rm -f __test.c
 grep '\tcode' main.go

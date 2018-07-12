@@ -1,8 +1,68 @@
+#include<stdarg.h>
 #include<stdio.h>
 #include<stdlib.h>
+#include<string.h>
+
+#define INIT_SIZE 8
 
 typedef struct {
+	int nalloc;
+	int length;
+	char *chars;
+} String;
+
+String *make_string() {
+	String *s = malloc(sizeof(String));
+	s->chars = malloc(INIT_SIZE);
+	s->nalloc = INIT_SIZE;
+	s->length = 0;
+	s->chars[0] = '\0';
+	return s;
+}
+
+static void realloc_string(String *s) {
+	int newsize = s->nalloc * 2;
+	char *chars = malloc(newsize);
+	strcpy(chars, s->chars);
+	s->chars = chars;
+	s->nalloc = newsize;
+}
+
+void string_append(String *s, char c) {
+	if (s->nalloc == (s->length + 1)) {
+		realloc_string(s);
+	}
+	s->chars[s->length++] = c;
+	s->chars[s->length] = '\0';
+}
+
+void string_appendf(String *s, char *fmt, ...) {
+	va_list args;
+	for (;;) {
+		int avail = s->nalloc - s->length;
+		va_start(args, fmt);
+		int written = vsnprintf(s->chars + s->length, avail, fmt, args);
+		va_end(args);
+		if (avail <= written) {
+			realloc_string(s);
+			continue;
+		}
+		s->length += written;
+		return;
+	}
+}
+
+enum Type {
+	NIL,
+	INT,
+	STR
+};
+
+typedef struct {
+	int type;
+
 	int i;
+	String *str;
 } Atom;
 
 typedef struct List {
@@ -12,24 +72,23 @@ typedef struct List {
 	struct List *cdr;
 } List;
 
-char *atom_to_string(Atom *a, char *s);
+//char *atom_to_string(Atom *a, char *s);
 List *make_list();
 List *make_int(int i);
 List *car(List *lst);
 
 List *Nil;
 
-/*
-Atom *make_atom(int i) {
+Atom *make_atom() {
 	Atom *a = malloc(sizeof(Atom));
-	a->i = i;
 	return a;
 }
-*/
 
+/*
 char *atom_to_string(Atom *a, char *s) {
 	sprintf(s, "%d", a->i);
 }
+*/
 
 List *make_list() {
 	List *lst = malloc(sizeof(List));
@@ -40,12 +99,52 @@ List *make_list() {
 }
 
 List *make_int(int i) {
-	Atom *atom = malloc(sizeof(Atom));
+	Atom *atom = make_atom();
+	atom->type = INT;
 	atom->i = i;
 
 	List *lst = make_list();
 	lst->atom = atom;
 	return lst;
+}
+
+List *make_symbol(char *chars) {
+	Atom *atom = make_atom();
+	atom->type = STR;
+	string_appendf(atom->str, "%s", chars);
+
+	List *lst = make_list();
+	lst->atom = atom;
+	return lst;
+}
+
+void to_string(String *str, List *lst) {
+	if (lst == NULL) {
+		return;
+	} else if (lst->atom == NULL) {
+		to_string(str, lst->car);
+		to_string(str, lst->cdr);
+	} else {
+		switch(lst->atom->type) {
+			case INT:
+				string_appendf(str, " %d", lst->atom->i);
+				break;
+			case STR:
+				string_appendf(str, " %s", lst->atom->str->chars);
+				break;
+			case NIL:
+				string_appendf(str, " Nil");
+				break;
+			default:
+				string_appendf(str, " Nil");
+		}
+	}
+}
+
+void printList(List *lst) {
+	String *s = make_string();
+	to_string(s, lst);
+	printf("%s\n", s->chars);
 }
 
 List *car(List *lst) {

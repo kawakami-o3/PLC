@@ -34,6 +34,7 @@ const (
 	C_FPTR
 	C_PROC
 	C_VAR
+	C_UNKNOWN
 )
 
 const (
@@ -243,38 +244,45 @@ func newGlobalEnv() *environment {
 	env.registFunc("print", func(args []*cell, e *environment) {
 		//e.include("stdio.h")
 
-		printArgs := ""
-		printBody := ""
-		for _, c := range args {
-			if c.isNum() {
-				printArgs += fmt.Sprintf(", %s->atom->i", c.value)
-				printBody += " %d"
-			} else if c.isAtom() {
-				printArgs += fmt.Sprintf(", %s->atom->i", c.value)
-				printBody += " %d"
-			} else {
-				ret := e.popRet()
-				if ret.isInt() {
-					printArgs += fmt.Sprintf(", %s->atom->i", ret.name)
+		/*
+			printArgs := ""
+			printBody := ""
+			for _, c := range args {
+				if c.isNum() {
+					printArgs += fmt.Sprintf(", %s->atom->i", c.value)
 					printBody += " %d"
-				} else if ret.isString() {
-					printArgs += fmt.Sprintf(", %s->atom->i", ret.name)
-					printBody += " %s"
-				} else if ret.isArray() {
-
-					printBody += " ("
-					for i := 0; i < ret.length; i++ {
-						printArgs += fmt.Sprintf(", nth(%s,%d)->atom->i", ret.name, i)
-						printBody += " %d"
-					}
-					printBody += " )"
+				} else if c.isAtom() {
+					printArgs += fmt.Sprintf(", %s->atom->i", c.value)
+					printBody += " %d"
 				} else {
-					panic("")
+					ret := e.popRet()
+					if ret.isInt() {
+						printArgs += fmt.Sprintf(", %s->atom->i", ret.name)
+						printBody += " %d"
+					} else if ret.isString() {
+						printArgs += fmt.Sprintf(", %s->atom->i", ret.name)
+						printBody += " %s"
+					} else if ret.isArray() {
+						// TODO nested list
+						printBody += " ("
+						for i := 0; i < ret.length; i++ {
+							printArgs += fmt.Sprintf(", nth(%s,%d)->atom->i", ret.name, i)
+							printBody += " %d"
+						}
+						printBody += " )"
+					} else {
+						panic("")
+					}
 				}
 			}
-		}
 
-		e.putsMain(fmt.Sprintf("printf(\"%s\\n\" %s);", printBody[1:], printArgs))
+			e.putsMain(fmt.Sprintf("printf(\"%s\\n\" %s);", printBody[1:], printArgs))
+		*/
+
+		for i := 0; i < len(args); i++ {
+			ret := e.popRet()
+			e.putsMain(fmt.Sprintf("printList(%s);", ret.name))
+		}
 
 		n := e.next()
 		retName := fmt.Sprintf("print_ret_%d", n)
@@ -371,6 +379,16 @@ func (this *environment) print() {
 	fmt.Println("}")
 }
 
+func emitSymbol(cell *cell, env *environment) {
+	n := env.next()
+	strName := fmt.Sprintf("str_%d", n)
+	symName := fmt.Sprintf("sym_%d", n)
+
+	env.putsMain(fmt.Sprintf("char *%s = \"%s\";", strName, cell.value))
+	env.putsMain(fmt.Sprintf("List *%s = make_symbol(%s);", symName, strName))
+	env.pushRet(newRet(C_STRING, symName))
+}
+
 func emit(cell *cell, env *environment) {
 	switch cell.typeId {
 	case LISP_NUM:
@@ -386,11 +404,15 @@ func emit(cell *cell, env *environment) {
 			switch d.typeId {
 			case DECL_FUNC:
 				env.pushRet(newRetProc(d.name, d.proc, env))
+				return
 			case DECL_VAR:
 				env.pushRet(newRet(C_VAR, d.name))
+				return
 			}
-			return
 		}
+
+		env.pushRet(newRet(C_UNKNOWN, d.name))
+		return
 	case LISP_LIST:
 		head := cell.list[0].value
 		switch head {
@@ -413,7 +435,11 @@ func emit(cell *cell, env *environment) {
 
 				names := []string{}
 				for _, i := range cell.list[1].list {
-					emit(i, env)
+					if i.typeId == LISP_NUM {
+						emit(i, env)
+					} else {
+						emitSymbol(i, env)
+					}
 					r := env.popRet()
 					names = append(names, r.name)
 				}
