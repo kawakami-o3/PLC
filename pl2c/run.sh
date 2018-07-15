@@ -23,7 +23,13 @@ set -x
 
 # to eval
 #TARGET=quote_7.lisp
-TARGET=quote_8.lisp
+#TARGET=quote_8.lisp
+#TARGET=define_0.lisp
+#TARGET=define_1.lisp
+#TARGET=define_2.lisp
+#TARGET=nil_0.lisp
+#TARGET=lambda_3.lisp
+TARGET=eval.lisp
 
 rm -f __test.c
 grep '\tcode' main.go
@@ -38,7 +44,6 @@ go build -o __pl2c.exe && ./__pl2c.exe ../test/$TARGET > __test.c && cat __test.
 #go build -o __pl2c.exe
 #./purelisp.exe > test.ll
 #clang test.ll
-
 
 
 gcc __test.c -o __a.exe && ./__a.exe

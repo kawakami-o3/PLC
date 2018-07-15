@@ -55,14 +55,18 @@ void string_appendf(String *s, char *fmt, ...) {
 enum Type {
 	NIL,
 	INT,
-	STR
+	STR,
+	PROC
 };
+
+struct List;
 
 typedef struct {
 	int type;
 
 	int i;
 	String *str;
+	struct List *(*proc)(struct List*);
 } Atom;
 
 typedef struct List {
@@ -77,7 +81,8 @@ List *make_list();
 List *make_int(int i);
 List *car(List *lst);
 
-List *Nil;
+List *nil;
+List *t;
 
 Atom *make_atom() {
 	Atom *a = malloc(sizeof(Atom));
@@ -118,12 +123,28 @@ List *make_symbol(char *chars) {
 	return lst;
 }
 
+
+	struct List *(*proc)(struct List*);
+List *make_lambda(List *(*proc)(struct List*)) {
+	Atom *atom = make_atom();
+	atom->type = PROC;
+	atom->proc = proc;
+
+	List *lst = make_list();
+	lst->atom = atom;
+	return lst;
+}
+
+
+
 void to_string(String *str, List *lst) {
 	if (lst == NULL) {
 		return;
 	} else if (lst->atom == NULL) {
 		to_string(str, lst->car);
-		to_string(str, lst->cdr);
+		if (lst->cdr != NULL && lst->cdr != nil) {
+			to_string(str, lst->cdr);
+		}
 	} else {
 		switch(lst->atom->type) {
 			case INT:
@@ -133,13 +154,28 @@ void to_string(String *str, List *lst) {
 				string_appendf(str, " %s", lst->atom->str->chars);
 				break;
 			case NIL:
-				string_appendf(str, " Nil");
+				string_appendf(str, " nil");
 				break;
 			default:
-				string_appendf(str, " Nil");
+				string_appendf(str, " nil");
 		}
 	}
 }
+
+/*
+List *callProc(List *proc, int argc, ...) {
+	va_list args;
+	List *ret;
+	List *lst = make_list();
+	va_start(args, argc);
+	for (int i=0 ; i<argc ; i++) {
+		List *a = va_arg(args, (List*));
+		lst = cons(a, lst);
+	}
+	va_end(args);
+	return proc.proc(lst);
+}
+*/
 
 void printList(List *lst) {
 	String *s = make_string();
@@ -176,7 +212,7 @@ List *nth(List *lst, int i) {
 	return nth(lst->cdr, i-1);
 }
 
-List *add(List *lst) {
+List *plc_add(List *lst) {
 	int i = 0;
 
 	List *a = lst->car;
@@ -190,7 +226,7 @@ List *add(List *lst) {
 	return make_int(i);
 }
 
-List *sub(List *lst) {
+List *plc_sub(List *lst) {
 	List *a = lst->car;
 	List *d = lst->cdr;
 	int i = a->atom->i;
@@ -207,5 +243,12 @@ List *sub(List *lst) {
 }
 
 void init_common() {
-	Nil = make_list();
+	nil = make_list();
+	nil->atom = make_atom();
+	nil->atom->type = NIL;
+
+	t = make_list();
+	t->atom = make_atom();
+	nil->atom->type = INT;
+	t->atom->i = 1;
 }

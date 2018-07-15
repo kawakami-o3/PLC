@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -94,7 +95,8 @@ func newDecl(typeId int, name string, proc func([]*cell, *environment)) *decl {
 type environment struct {
 	parent *environment
 
-	dict map[string]*decl
+	dict     map[string]*decl
+	external []string
 
 	// not yet shared in an environment tree.
 	count    int // instruction count
@@ -112,6 +114,7 @@ func newLocalEnv(parent *environment) *environment {
 	env.parent = parent
 
 	env.dict = map[string]*decl{}
+	env.external = []string{}
 
 	env.count = 0
 	env.strCount = 0
@@ -129,7 +132,7 @@ func consAll(names []string) string {
 	for _, n := range names {
 		ret += fmt.Sprintf("cons(%s, ", n)
 	}
-	ret += "Nil"
+	ret += "nil"
 	for i := 0; i < len(names); i++ {
 		ret += ")"
 	}
@@ -138,6 +141,9 @@ func consAll(names []string) string {
 
 func newGlobalEnv() *environment {
 	env := newLocalEnv(nil)
+
+	env.registVar("nil")
+	env.registVar("t")
 
 	env.registFunc("+", func(args []*cell, local *environment) {
 		n := local.next()
@@ -151,7 +157,7 @@ func newGlobalEnv() *environment {
 		}
 		local.putsMain(fmt.Sprintf("List *%s = %s;", argsName, consAll(argNames)))
 
-		local.putsMain(fmt.Sprintf("List *%s = add(%s);", retName, argsName))
+		local.putsMain(fmt.Sprintf("List *%s = plc_add(%s);", retName, argsName))
 
 		local.pushRet(newRet(C_INT, retName))
 	})
@@ -167,7 +173,7 @@ func newGlobalEnv() *environment {
 		}
 		local.putsMain(fmt.Sprintf("List *%s = %s;", argsName, consAll(argNames)))
 
-		local.putsMain(fmt.Sprintf("List *%s = sub(%s);", retName, argsName))
+		local.putsMain(fmt.Sprintf("List *%s = plc_sub(%s);", retName, argsName))
 
 		local.pushRet(newRet(C_INT, retName))
 	})
@@ -175,12 +181,12 @@ func newGlobalEnv() *environment {
 		if len(args) != 1 {
 			panic("atom: invalid arguments")
 		}
-		n := env.next()
+		n := e.next()
 		retName := fmt.Sprintf("atom_%d", n)
-		arg := env.popRet()
+		arg := e.popRet()
 
-		env.putsMain(fmt.Sprintf("List *%s = make_int(%s->atom != NULL);", retName, arg.name))
-		env.pushRet(newRet(C_INT, retName))
+		e.putsMain(fmt.Sprintf("List *%s = make_int(%s->atom != NULL);", retName, arg.name))
+		e.pushRet(newRet(C_INT, retName))
 	})
 	env.registFunc("eq", func(args []*cell, e *environment) {
 		//e.include("stdbool.h")
@@ -313,6 +319,9 @@ func (this *environment) popRet() *ret {
 }
 
 func (this *environment) next() int {
+	if this.parent != nil {
+		return this.parent.next()
+	}
 	this.count++
 	return this.count
 }
@@ -357,6 +366,23 @@ func (this *environment) find(name string) *decl {
 	}
 }
 
+func (this *environment) have(name string) bool {
+	_, contains := this.dict[name]
+	return contains
+}
+
+func (this *environment) registExternal(name string) {
+	if name == "nil" || name == "t" {
+		return
+	}
+	for _, s := range this.external {
+		if s == name {
+			return
+		}
+	}
+	this.external = append(this.external, name)
+}
+
 func (this *environment) print() {
 	for h, _ := range this.header {
 		fmt.Printf("#include<%s>\n", h)
@@ -377,6 +403,26 @@ func (this *environment) print() {
 	fmt.Println("init_common();")
 	fmt.Println(this.main)
 	fmt.Println("}")
+}
+
+var sanitizeMatchers map[string]*regexp.Regexp
+
+func sanitizeName(name string) string {
+	if len(name) == 1 {
+		return name
+	}
+	if sanitizeMatchers == nil {
+		sanitizeMatchers = map[string]*regexp.Regexp{}
+
+		sanitizeMatchers["_s_"] = regexp.MustCompile(`\*`)
+		sanitizeMatchers["_k_"] = regexp.MustCompile(`:`) // keyword
+		sanitizeMatchers["_m_"] = regexp.MustCompile(`-`) // FIXME (- 1 1)
+	}
+
+	for k, m := range sanitizeMatchers {
+		name = m.ReplaceAllString(name, k)
+	}
+	return name
 }
 
 func emitSymbol(cell *cell, env *environment) {
@@ -406,12 +452,16 @@ func emit(cell *cell, env *environment) {
 				env.pushRet(newRetProc(d.name, d.proc, env))
 				return
 			case DECL_VAR:
+				if !env.have(cell.value) {
+					env.registExternal(cell.value)
+				}
 				env.pushRet(newRet(C_VAR, d.name))
 				return
 			}
 		}
 
-		env.pushRet(newRet(C_UNKNOWN, d.name))
+		//env.pushRet(newRet(C_UNKNOWN, cell.value))
+		panic(fmt.Sprintf("unknown!!! %s", cell.value))
 		return
 	case LISP_LIST:
 		head := cell.list[0].value
@@ -451,9 +501,14 @@ func emit(cell *cell, env *environment) {
 				ret.length = len(cell.list[1].list)
 
 				env.pushRet(ret)
-			} else {
+			} else if cell.list[1].typeId == LISP_NUM {
 				env.putsMain(fmt.Sprintf("List *%s = make_int(%s);", retName, cell.list[1].value))
 				env.pushRet(newRet(C_INT, retName))
+			} else if cell.list[1].typeId == LISP_ATOM {
+				env.putsMain(fmt.Sprintf("List *%s = make_symbol(\"%s\");", retName, cell.list[1].value))
+				env.pushRet(newRet(C_STRING, retName))
+			} else {
+				panic("quote: not implemented to " + cell.list[1].value)
 			}
 			return
 		case "if":
@@ -500,20 +555,48 @@ func emit(cell *cell, env *environment) {
 			//args := cell.list[1:]
 			label := cell.list[1]
 			body := cell.list[2]
-			if body.typeId == LISP_LIST && len(body.list) > 0 && body.list[0].value == "lambda" {
+			if body.typeId == LISP_LIST {
+				if len(body.list) > 0 && body.list[0].value == "lambda" {
 
-				retName := label.value
-				d := env.find(retName)
-				if d == nil {
-					env.registFunc(retName, nil) // need body?
+					retName := label.value
+					d := env.find(retName)
+					if d == nil {
+						env.registFunc(retName, nil) // need body?
+						env.putsPre(fmt.Sprintf("List *%s;", retName))
+					}
+
+					/*
+						env.putsPre(fmt.Sprintf("List *(*%s)(List*);", retName))
+						emit(body, env)
+						bodyRet := env.popRet()
+						env.putsMain(fmt.Sprintf("%s = %s;", retName, bodyRet.name))
+					*/
+
+					emit(body, env)
+					bodyRet := env.popRet()
+					/*
+						for _, s := range bodyRet.env.external {
+							env.putsPre(fmt.Sprintf("List *%s = %s;", retName, bodyRet.name))
+						}
+					*/
+					env.putsMain(fmt.Sprintf("%s = %s;", retName, bodyRet.name))
+
+					env.pushRet(newRet(C_STRING, retName))
+				} else {
+					emit(body, env)
+					bodyRet := env.popRet()
+
+					retName := label.value
+					d := env.find(retName)
+					if d == nil {
+						env.registVar(retName)
+						env.putsMain(fmt.Sprintf("List *%s = %s;", retName, bodyRet.name))
+					} else {
+						env.putsMain(fmt.Sprintf("%s = %s;", retName, bodyRet.name))
+					}
+
+					env.pushRet(newRet(C_STRING, retName))
 				}
-
-				env.putsPre(fmt.Sprintf("List *(*%s)(List*);", retName))
-				emit(body, env)
-				bodyRet := env.popRet()
-				env.putsMain(fmt.Sprintf("%s = %s;", retName, bodyRet.name))
-
-				env.pushRet(newRet(C_STRING, retName))
 			} else if body.isNum() {
 				retName := label.value
 				value := body.value
@@ -550,13 +633,26 @@ func emit(cell *cell, env *environment) {
 			}
 			localRet := localEnv.popRet()
 
-			env.putsPre(fmt.Sprintf("List *%s(List *args){", retName))
+			procName := fmt.Sprintf("lambda_proc_%d", n)
+
+			if len(localEnv.external) > 0 {
+				env.putsPre(fmt.Sprintf("List *%s_external;", procName))
+			}
+			env.putsPre(fmt.Sprintf("List *%s(List *args){", procName))
 			for i, c := range cell.list[1].list {
 				env.putsPre(fmt.Sprintf("List *%s = nth(args, %d);", c.value, i))
+			}
+			for i, s := range localEnv.external {
+				env.putsPre(fmt.Sprintf("List *%s = nth(%s_external, %d);", s, procName, i))
 			}
 			env.putsPre(localEnv.main)
 			env.putsPre(fmt.Sprintf("return %s;", localRet.name))
 			env.putsPre("}")
+
+			if len(localEnv.external) > 0 {
+				env.putsMain(fmt.Sprintf("%s_external = %s;", procName, consAll(localEnv.external)))
+			}
+			env.putsMain(fmt.Sprintf("List *%s = make_lambda(%s);", retName, procName))
 
 			env.pushRet(ret)
 			return
@@ -570,7 +666,8 @@ func emit(cell *cell, env *environment) {
 	exps := []*ret{}
 	for _, c := range cell.list[1:] {
 		emit(c, env)
-		exps = append(exps, env.popRet())
+		r := env.popRet()
+		exps = append(exps, r)
 	}
 
 	if proc.typeId == C_FPTR {
@@ -580,7 +677,6 @@ func emit(cell *cell, env *environment) {
 		}
 		env.putsMain(proc.name + "(" + labelArgs[1:] + ");")
 	} else if proc.typeId == C_PROC {
-		//if proc.name == "proc" {
 		if proc.proc != nil {
 			// proc
 			for _, e := range exps {
@@ -596,20 +692,22 @@ func emit(cell *cell, env *environment) {
 			}
 
 			env.putsMain(fmt.Sprintf("List *%s = %s;", argName, consAll(expNames))) // declaration
-			/*
-				env.putsMain(fmt.Sprintf("List *%s[] = {", argName)) // declaration
-				argCnt := ""
-				for _, e := range exps {
-					argCnt += fmt.Sprintf(",%s", e.name)
-				}
-				env.putsMain(argCnt[1:])
-				env.putsMain("};")
-			*/
-			env.pushRet(newRet(C_INT, fmt.Sprintf("%s(%s)", proc.name, argName)))
+			env.pushRet(newRet(C_INT, fmt.Sprintf("%s->atom->proc(%s)", proc.name, argName)))
 		}
 
 	} else {
-		panic("not a function: " + proc.name)
+		// FIXME
+		//panic("not a function: " + proc.name)
+
+		n := env.next()
+		argName := fmt.Sprintf("%s_args_%d", proc.name, n)
+		expNames := []string{}
+		for _, e := range exps {
+			expNames = append(expNames, e.name)
+		}
+
+		env.putsMain(fmt.Sprintf("List *%s = %s;", argName, consAll(expNames))) // declaration
+		env.pushRet(newRet(C_INT, fmt.Sprintf("%s->atom->proc(%s)", proc.name, argName)))
 	}
 }
 
@@ -632,7 +730,7 @@ type cell struct {
 func newAtom(token string) *cell {
 	return &cell{
 		typeId: LISP_ATOM,
-		value:  token,
+		value:  sanitizeName(token),
 		list:   []*cell{},
 	}
 }
