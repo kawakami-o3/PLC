@@ -2,7 +2,7 @@
 (progn
 	(define _eval
 		(lambda (form env)
-			(+ 1 1)))
+			(+ 0 0)))
 	
 	(define *env* (quote (nil nil)))
 
@@ -38,7 +38,7 @@
 						 (quote :unbound:)
 						 (_lookup name (car env)))
 					 (car (cdr pair))))
-			 (_assoc name (car (cdr env))))))
+				 (_assoc name (car (cdr env))))))
 
 	(define _bind
 		(lambda (fn-args act-args env)
@@ -74,7 +74,21 @@
 							 (cons (quote (a b))
 										 (cons (lambda (ne) (eq (_lookup (quote a) ne) (_lookup (quote b) ne)))
 													 nil))))
-
+	(_setv (quote +)
+				 (cons (quote :lambda:)
+							 (cons (quote (a b))
+										 (cons (lambda (ne) (+ (_lookup (quote a) ne) (_lookup (quote b) ne)))
+													 nil))))
+		(_setv (quote 1) (quote 1))
+		(_setv (quote 2) (quote 2))
+		(_setv (quote 3) (quote 3))
+		(_setv (quote 4) (quote 4))
+		(_setv (quote 5) (quote 5))
+		(_setv (quote 6) (quote 6))
+		(_setv (quote 7) (quote 7))
+		(_setv (quote 8) (quote 8))
+		(_setv (quote 9) (quote 9))
+	
 	(define _eval
 		(lambda (form env)
 			(if (atom form)
@@ -105,5 +119,6 @@
 
 	(define eval
 		(lambda (form) (_eval form *env*)))
+
 
 	(print (eval (quote (+ 1 2)))))

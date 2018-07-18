@@ -5,6 +5,10 @@
 
 #define INIT_SIZE 8
 
+void printLine() {
+	printf("%d\n", __LINE__);
+}
+
 typedef struct {
 	int nalloc;
 	int length;
@@ -76,7 +80,6 @@ typedef struct List {
 	struct List *cdr;
 } List;
 
-//char *atom_to_string(Atom *a, char *s);
 List *make_list();
 List *make_int(int i);
 List *car(List *lst);
@@ -88,12 +91,6 @@ Atom *make_atom() {
 	Atom *a = malloc(sizeof(Atom));
 	return a;
 }
-
-/*
-char *atom_to_string(Atom *a, char *s) {
-	sprintf(s, "%d", a->i);
-}
-*/
 
 List *make_list() {
 	List *lst = malloc(sizeof(List));
@@ -116,6 +113,7 @@ List *make_int(int i) {
 List *make_symbol(char *chars) {
 	Atom *atom = make_atom();
 	atom->type = STR;
+	atom->str = make_string();
 	string_appendf(atom->str, "%s", chars);
 
 	List *lst = make_list();
@@ -123,8 +121,6 @@ List *make_symbol(char *chars) {
 	return lst;
 }
 
-
-	struct List *(*proc)(struct List*);
 List *make_lambda(List *(*proc)(struct List*)) {
 	Atom *atom = make_atom();
 	atom->type = PROC;
@@ -135,16 +131,46 @@ List *make_lambda(List *(*proc)(struct List*)) {
 	return lst;
 }
 
-
+List *eq(List *a, List *b) {
+	if (a->atom != NULL && b->atom != NULL) {
+		if (a->atom->type != b->atom->type) {
+			return nil;
+		} else if (a->atom->type == INT) {
+			return a->atom->i == b->atom->i ? t : nil;
+		} else if (a->atom->type == STR) {
+			return strcmp(a->atom->str->chars, b->atom->str->chars) == 0 ? t : nil;
+		} else if (a->atom->type == PROC) {
+			return a->atom->proc == b->atom->proc ? t : nil;
+		}
+	} else if (a->car != NULL && b->car != NULL) {
+		if (eq(a->car, b->car)) {
+			if (a->cdr != NULL && b->cdr != NULL) {
+				return eq(a->cdr, b->cdr);
+			} else if (a->cdr == NULL && b->cdr == NULL) {
+				return t;
+			} else {
+				return nil;
+			}
+			return nil;
+		} else {
+			return nil;
+		}
+	} else {
+		return nil;
+	}
+}
 
 void to_string(String *str, List *lst) {
 	if (lst == NULL) {
 		return;
 	} else if (lst->atom == NULL) {
+		string_appendf(str, "(");
 		to_string(str, lst->car);
+		string_appendf(str, " ");
 		if (lst->cdr != NULL && lst->cdr != nil) {
 			to_string(str, lst->cdr);
 		}
+		string_appendf(str, ")");
 	} else {
 		switch(lst->atom->type) {
 			case INT:
@@ -153,11 +179,14 @@ void to_string(String *str, List *lst) {
 			case STR:
 				string_appendf(str, " %s", lst->atom->str->chars);
 				break;
+			case PROC:
+				string_appendf(str, " PROC");
+				break;
 			case NIL:
 				string_appendf(str, " nil");
 				break;
 			default:
-				string_appendf(str, " nil");
+				string_appendf(str, " ???");
 		}
 	}
 }
@@ -246,6 +275,7 @@ void init_common() {
 	nil = make_list();
 	nil->atom = make_atom();
 	nil->atom->type = NIL;
+	nil->atom->i = 0;
 
 	t = make_list();
 	t->atom = make_atom();

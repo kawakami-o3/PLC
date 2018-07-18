@@ -36,6 +36,7 @@ const (
 	C_PROC
 	C_VAR
 	C_UNKNOWN
+	C_CALL
 )
 
 const (
@@ -67,6 +68,10 @@ func newRetArr(name string, length int) ret {
 
 func (this ret) isInt() bool {
 	return this.typeId == C_INT
+}
+
+func (this ret) isCall() bool {
+	return this.typeId == C_CALL
 }
 
 func (this ret) isString() bool {
@@ -196,18 +201,25 @@ func newGlobalEnv() *environment {
 			rets = append(rets, e.popRet())
 		}
 
-		first := rets[0].name
+		//first := rets[0].name
 		exps := []string{}
-		for _, r := range rets[1:] {
-			exps = append(exps, fmt.Sprintf("%s->atom->i == %s->atom->i", first, r.name))
+		//for _, r := range rets[1:] {
+		for _, r := range rets {
+			//exps = append(exps, fmt.Sprintf("%s->atom->i == %s->atom->i", first, r.name))
+			exps = append(exps, fmt.Sprintf("%s", r.name))
 		}
 
 		n := e.next()
 		retName := fmt.Sprintf("eq_%d", n)
 
 		//e.putsMain(fmt.Sprintf("bool %s = (", retName))
-		e.putsMain(fmt.Sprintf("List *%s = make_int(", retName))
-		e.putsMain(strings.Join(exps, " && "))
+		/*
+			e.putsMain(fmt.Sprintf("List *%s = make_int(", retName))
+			e.putsMain(strings.Join(exps, " && "))
+			e.putsMain(");")
+		*/
+		e.putsMain(fmt.Sprintf("List *%s = eq(", retName))
+		e.putsMain(strings.Join(exps, ","))
 		e.putsMain(");")
 		e.pushRet(newRet(C_INT, retName))
 	})
@@ -307,6 +319,13 @@ func (this *environment) registVar(name string) {
 	this.dict[name] = newDecl(DECL_VAR, name, nil)
 }
 
+func (this *environment) registGlobal(name string) {
+	if this.parent != nil {
+		this.parent.registGlobal(name)
+	}
+	this.dict[name] = newDecl(DECL_VAR, name, nil)
+}
+
 func (this *environment) pushRet(r ret) {
 	this.retStack = append(this.retStack, r)
 }
@@ -371,11 +390,40 @@ func (this *environment) have(name string) bool {
 	return contains
 }
 
+func (this *environment) hasGlobal(name string) bool {
+	if this.parent != nil {
+		return this.parent.hasGlobal(name)
+	}
+
+	elm := this.dict[name]
+	if elm == nil || elm.typeId == DECL_FUNC {
+		return false
+	} else {
+		return true
+	}
+}
+
+func (this *environment) globals() []string {
+	if this.parent != nil {
+		return this.parent.globals()
+	}
+	names := []string{}
+	for k, _ := range this.dict {
+		names = append(names, k)
+	}
+	return names
+}
+
 func (this *environment) registExternal(name string) {
 	if name == "nil" || name == "t" {
 		return
 	}
 	for _, s := range this.external {
+		if s == name {
+			return
+		}
+	}
+	for _, s := range this.globals() {
 		if s == name {
 			return
 		}
@@ -427,11 +475,15 @@ func sanitizeName(name string) string {
 
 func emitSymbol(cell *cell, env *environment) {
 	n := env.next()
-	strName := fmt.Sprintf("str_%d", n)
 	symName := fmt.Sprintf("sym_%d", n)
+	if env.hasGlobal(cell.value) {
+		env.putsMain(fmt.Sprintf("List *%s = %s;", symName, cell.value))
+	} else {
+		strName := fmt.Sprintf("str_%d", n)
 
-	env.putsMain(fmt.Sprintf("char *%s = \"%s\";", strName, cell.value))
-	env.putsMain(fmt.Sprintf("List *%s = make_symbol(%s);", symName, strName))
+		env.putsMain(fmt.Sprintf("char *%s = \"%s\";", strName, cell.value))
+		env.putsMain(fmt.Sprintf("List *%s = make_symbol(%s);", symName, strName))
+	}
 	env.pushRet(newRet(C_STRING, symName))
 }
 
@@ -537,6 +589,9 @@ func emit(cell *cell, env *environment) {
 			for _, c := range cell.list[1:] {
 				emit(c, env)
 				r = env.popRet()
+				if r.isCall() {
+					env.putsMain(fmt.Sprintf("%s;", r.name))
+				}
 			}
 
 			n := env.next()
@@ -589,11 +644,13 @@ func emit(cell *cell, env *environment) {
 					retName := label.value
 					d := env.find(retName)
 					if d == nil {
-						env.registVar(retName)
-						env.putsMain(fmt.Sprintf("List *%s = %s;", retName, bodyRet.name))
-					} else {
-						env.putsMain(fmt.Sprintf("%s = %s;", retName, bodyRet.name))
+						//env.registVar(retName)
+						//env.putsMain(fmt.Sprintf("List *%s = %s;", retName, bodyRet.name))
+
+						env.registGlobal(retName)
+						env.putsPre(fmt.Sprintf("List *%s;", retName))
 					}
+					env.putsMain(fmt.Sprintf("%s = %s;", retName, bodyRet.name))
 
 					env.pushRet(newRet(C_STRING, retName))
 				}
@@ -657,7 +714,6 @@ func emit(cell *cell, env *environment) {
 			env.pushRet(ret)
 			return
 		}
-		//case "progn":
 	default:
 	}
 
@@ -692,13 +748,12 @@ func emit(cell *cell, env *environment) {
 			}
 
 			env.putsMain(fmt.Sprintf("List *%s = %s;", argName, consAll(expNames))) // declaration
-			env.pushRet(newRet(C_INT, fmt.Sprintf("%s->atom->proc(%s)", proc.name, argName)))
+			env.pushRet(newRet(C_CALL, fmt.Sprintf("%s->atom->proc(%s)", proc.name, argName)))
 		}
 
 	} else {
 		// FIXME
 		//panic("not a function: " + proc.name)
-
 		n := env.next()
 		argName := fmt.Sprintf("%s_args_%d", proc.name, n)
 		expNames := []string{}
@@ -707,6 +762,8 @@ func emit(cell *cell, env *environment) {
 		}
 
 		env.putsMain(fmt.Sprintf("List *%s = %s;", argName, consAll(expNames))) // declaration
+		//env.putsMain("// hoge")
+
 		env.pushRet(newRet(C_INT, fmt.Sprintf("%s->atom->proc(%s)", proc.name, argName)))
 	}
 }
