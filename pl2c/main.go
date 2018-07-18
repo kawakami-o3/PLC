@@ -194,30 +194,19 @@ func newGlobalEnv() *environment {
 		e.pushRet(newRet(C_INT, retName))
 	})
 	env.registFunc("eq", func(args []*cell, e *environment) {
-		//e.include("stdbool.h")
-
 		rets := []*ret{}
 		for i := 0; i < len(args); i++ {
 			rets = append(rets, e.popRet())
 		}
 
-		//first := rets[0].name
 		exps := []string{}
-		//for _, r := range rets[1:] {
 		for _, r := range rets {
-			//exps = append(exps, fmt.Sprintf("%s->atom->i == %s->atom->i", first, r.name))
 			exps = append(exps, fmt.Sprintf("%s", r.name))
 		}
 
 		n := e.next()
 		retName := fmt.Sprintf("eq_%d", n)
 
-		//e.putsMain(fmt.Sprintf("bool %s = (", retName))
-		/*
-			e.putsMain(fmt.Sprintf("List *%s = make_int(", retName))
-			e.putsMain(strings.Join(exps, " && "))
-			e.putsMain(");")
-		*/
 		e.putsMain(fmt.Sprintf("List *%s = eq(", retName))
 		e.putsMain(strings.Join(exps, ","))
 		e.putsMain(");")
@@ -237,15 +226,6 @@ func newGlobalEnv() *environment {
 		n := e.next()
 		retName := fmt.Sprintf("cdr_%d", n)
 
-		/*
-			arrBody := ""
-			for i := 1; i < arg.length; i++ {
-				arrBody += fmt.Sprintf(",%s[%d]", arg.name, i)
-			}
-			arrBody = arrBody[1:]
-
-			e.putsMain(fmt.Sprintf("int %s[] = {%s};", retName, arrBody))
-		*/
 		e.putsMain(fmt.Sprintf("List *%s = cdr(%s);", retName, arg.name))
 		e.pushRet(newRetArr(retName, arg.length-1))
 	})
@@ -255,48 +235,10 @@ func newGlobalEnv() *environment {
 
 		n := e.next()
 		retName := fmt.Sprintf("cons_%d", n)
-		//e.putsMain(fmt.Sprintf("List *%s = %s;", retName, consAll(names)))
 		e.putsMain(fmt.Sprintf("List *%s = cons(%s, %s);", retName, elm.name, rest.name))
 		e.pushRet(newRetArr(retName, 1+rest.length))
 	})
 	env.registFunc("print", func(args []*cell, e *environment) {
-		//e.include("stdio.h")
-
-		/*
-			printArgs := ""
-			printBody := ""
-			for _, c := range args {
-				if c.isNum() {
-					printArgs += fmt.Sprintf(", %s->atom->i", c.value)
-					printBody += " %d"
-				} else if c.isAtom() {
-					printArgs += fmt.Sprintf(", %s->atom->i", c.value)
-					printBody += " %d"
-				} else {
-					ret := e.popRet()
-					if ret.isInt() {
-						printArgs += fmt.Sprintf(", %s->atom->i", ret.name)
-						printBody += " %d"
-					} else if ret.isString() {
-						printArgs += fmt.Sprintf(", %s->atom->i", ret.name)
-						printBody += " %s"
-					} else if ret.isArray() {
-						// TODO nested list
-						printBody += " ("
-						for i := 0; i < ret.length; i++ {
-							printArgs += fmt.Sprintf(", nth(%s,%d)->atom->i", ret.name, i)
-							printBody += " %d"
-						}
-						printBody += " )"
-					} else {
-						panic("")
-					}
-				}
-			}
-
-			e.putsMain(fmt.Sprintf("printf(\"%s\\n\" %s);", printBody[1:], printArgs))
-		*/
-
 		for i := 0; i < len(args); i++ {
 			ret := e.popRet()
 			e.putsMain(fmt.Sprintf("printList(%s);", ret.name))
@@ -435,14 +377,6 @@ func (this *environment) print() {
 	for h, _ := range this.header {
 		fmt.Printf("#include<%s>\n", h)
 	}
-	/*
-	   	fmt.Println(`
-	   typedef struct PAIR_ {
-	   	int car;
-	   	struct pair_ *cdr;
-	   } PAIR;
-	   	`)
-	*/
 
 	fmt.Println(readFile("templates/common.c"))
 
@@ -528,13 +462,6 @@ func emit(cell *cell, env *environment) {
 			}
 
 			if cell.list[1].typeId == LISP_LIST {
-				/*
-					arrBody := ""
-					for _, i := range cell.list[1].list {
-						arrBody += "," + i.value
-					}
-				*/
-
 				names := []string{}
 				for _, i := range cell.list[1].list {
 					if i.typeId == LISP_NUM {
@@ -546,7 +473,6 @@ func emit(cell *cell, env *environment) {
 					names = append(names, r.name)
 				}
 
-				//env.putsMain(fmt.Sprintf("List *%s = %s;", retName, arrBody[1:]))
 				env.putsMain(fmt.Sprintf("List *%s = %s;", retName, consAll(names)))
 
 				ret := newRet(C_ARRAY, retName)
@@ -620,20 +546,9 @@ func emit(cell *cell, env *environment) {
 						env.putsPre(fmt.Sprintf("List *%s;", retName))
 					}
 
-					/*
-						env.putsPre(fmt.Sprintf("List *(*%s)(List*);", retName))
-						emit(body, env)
-						bodyRet := env.popRet()
-						env.putsMain(fmt.Sprintf("%s = %s;", retName, bodyRet.name))
-					*/
-
 					emit(body, env)
 					bodyRet := env.popRet()
-					/*
-						for _, s := range bodyRet.env.external {
-							env.putsPre(fmt.Sprintf("List *%s = %s;", retName, bodyRet.name))
-						}
-					*/
+
 					env.putsMain(fmt.Sprintf("%s = %s;", retName, bodyRet.name))
 
 					env.pushRet(newRet(C_STRING, retName))
@@ -644,9 +559,6 @@ func emit(cell *cell, env *environment) {
 					retName := label.value
 					d := env.find(retName)
 					if d == nil {
-						//env.registVar(retName)
-						//env.putsMain(fmt.Sprintf("List *%s = %s;", retName, bodyRet.name))
-
 						env.registGlobal(retName)
 						env.putsPre(fmt.Sprintf("List *%s;", retName))
 					}
@@ -908,46 +820,6 @@ func readFrom(buf *TokenBuffer) (*cell, error) {
 }
 
 func main() {
-	//code := "(+ 1 (- 3 2))\n(+ 1 (- 3 2))"
-	//code := "(+ 1 (- 3 2))"
-	//code := "(+ 1 2)"
-	//code := "(print (print 1 2 3 4) (print 3 5 5))"
-	//code := "(print (atom 4) (atom (print 3)))"
-	//code := "(print (+ 1 2))"
-	//code := "(print (+ 3 (+ 1 2)))"
-	//code := "(print (+ 3 (+ 1 2) 8))" // FIXME raise compile error
-	//code := "(print (+ 3 (+ 1 2) 8)))"
-
-	//code := "(progn\n (define a 10) (print (+ 100 a)))"
-
-	// lambda
-	//code := "(print ((lambda (x) (+ x 1)) 10))"
-	//code := "(print ((lambda (x) (+ x 1)) 10) ((lambda (y) (+ y 20)) 3))"
-	//code := "(print ((lambda (x) (+ x 1)) 10) ((lambda (y z) (+ y z 20)) 3 8))"
-
-	// define lambda
-	//code := "(define fact 10)" // define function -> special form
-	//code := "(progn (define fact (lambda (x) (+ x 1))) (print (fact 10)))"
-
-	// eq
-	//code := "(print (eq 1 1))"
-	//code := "(print (eq 1 0))"
-	//code := "(print (eq 1 1 (+ 1 3)))"
-
-	// if
-	//code := "(print (if (eq 1 1) 1 0))"
-	//code := "(progn (define fib (lambda (n) (if (eq n 0) 1 (if (eq n 1) 1 (+ (fib (- n 1)) (fib (- n 2))))))) (print (fib 1)))"
-	//code := "(progn (define fib (lambda (n) (if (eq n 0) 1 (if (eq n 1) 1 (+ (fib (- n 1)) (fib (- n 2))))))) (print (fib 2)) (print (fib 3)) (print (fib 4)) (print (fib 5)) (print (fib 6)))"
-
-	// quote
-	//code := "(print (quote 1))"
-	//code := "(print (quote (1 2 3)))"
-	//code := "(print (car (quote (1 2 3))))"
-	//code := "(print (car (cdr (quote (1 2 3)))))"
-	//code := "(print (cdr (quote (1 2 3))))"
-	//code := "(print (cons 2 1))"
-	//code := "(print (cons 2 (quote (1 3))))"
-
 	flag.Parse()
 	srcPath, err := filepath.Abs(flag.Args()[0])
 	if err != nil {
