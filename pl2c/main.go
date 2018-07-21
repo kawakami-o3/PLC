@@ -13,7 +13,6 @@ import (
 )
 
 func readFile(filename string) string {
-	//file, err := os.Open("templates/common.c")
 	file, err := os.Open(filename)
 	if err != nil {
 		panic(err)
@@ -378,7 +377,9 @@ func (this *environment) print() {
 		fmt.Printf("#include<%s>\n", h)
 	}
 
-	fmt.Println(readFile("templates/common.c"))
+	common, _ := Assets.File("/templates/common.c")
+	commonBody, _ := ioutil.ReadAll(common)
+	fmt.Println(string(commonBody))
 
 	fmt.Println(this.pre)
 	fmt.Println("int main() {")
@@ -825,6 +826,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
 	srcCnt := readFile(srcPath)
 
 	cell, err := readFrom(tokenize(srcCnt))

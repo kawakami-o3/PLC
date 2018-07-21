@@ -2,7 +2,7 @@
 
 set -x
 
-#TARGET=lambda_1.lisp
+TARGET=lambda_1.lisp
 #TARGET=lambda_2.lisp
 #TARGET=define_lambda_0.lisp
 #TARGET=eq_0.lisp
@@ -29,10 +29,12 @@ set -x
 #TARGET=define_2.lisp
 #TARGET=nil_0.lisp
 #TARGET=lambda_3.lisp
-TARGET=eval.lisp
+#TARGET=eval.lisp
+
+goblet templates > templates.go 
 
 rm -f __test.c
-grep '\tcode' main.go
+#grep '\tcode' main.go
 goimports -w *.go
 #go build -o __pl2c.exe && ./__pl2c.exe > __test.c && cat __test.c
 
