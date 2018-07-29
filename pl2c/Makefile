@@ -12,6 +12,9 @@ build:
 	goblet templates > $(ASSETS)
 	go build
 
+test: build
+	go test
+
 clean:
 	go clean
 	rm -f $(ASSETS)

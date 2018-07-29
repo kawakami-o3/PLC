@@ -2,7 +2,7 @@
 
 set -x
 
-TARGET=lambda_1.lisp
+#TARGET=lambda_1.lisp
 #TARGET=lambda_2.lisp
 #TARGET=define_lambda_0.lisp
 #TARGET=eq_0.lisp
@@ -28,19 +28,20 @@ TARGET=lambda_1.lisp
 #TARGET=define_1.lisp
 #TARGET=define_2.lisp
 #TARGET=nil_0.lisp
-#TARGET=lambda_3.lisp
+TARGET=lambda_3.lisp
 #TARGET=eval.lisp
 
-goblet templates > templates.go 
+make clean
+make
 
 rm -f __test.c
-#grep '\tcode' main.go
-goimports -w *.go
 #go build -o __pl2c.exe && ./__pl2c.exe > __test.c && cat __test.c
 
 #go build -o __pl2c.exe && ./__pl2c.exe ../test/add_0.lisp > __test.c && cat __test.c
-go build -o __pl2c.exe && ./__pl2c.exe ../test/$TARGET > __test.c && cat __test.c
-#go build -o __pl2c.exe && ./__pl2c.exe ../test/$TARGET
+#go build -o __pl2c.exe && ./__pl2c.exe ../test/$TARGET > __test.c && cat __test.c
+go build -o __pl2c.exe && ./__pl2c.exe ../test/$TARGET
+#go build -o __pl2c.exe && ./__pl2c.exe -S -o ./test.c ../test/$TARGET
+#go build -o __pl2c.exe && ./__pl2c.exe -S ../test/$TARGET
 
 #go build -o __pl2c.exe && ./__pl2c.exe
 #go build -o __pl2c.exe
@@ -48,5 +49,5 @@ go build -o __pl2c.exe && ./__pl2c.exe ../test/$TARGET > __test.c && cat __test.
 #clang test.ll
 
 
-gcc __test.c -o __a.exe && ./__a.exe
+#gcc __test.c -o __a.exe && ./__a.exe
 

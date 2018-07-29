@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -359,33 +360,38 @@ func (this *environment) registExternal(name string) {
 	if name == "nil" || name == "t" {
 		return
 	}
-	for _, s := range this.external {
-		if s == name {
-			return
-		}
-	}
+
 	for _, s := range this.globals() {
 		if s == name {
 			return
 		}
 	}
+
+	for _, s := range this.external {
+		if s == name {
+			return
+		}
+	}
+
 	this.external = append(this.external, name)
 }
 
-func (this *environment) print() {
+func (this *environment) toClang() string {
+	code := ""
 	for h, _ := range this.header {
-		fmt.Printf("#include<%s>\n", h)
+		code += fmt.Sprintf("#include<%s>\n", h)
 	}
 
 	common, _ := Assets.File("/templates/common.c")
 	commonBody, _ := ioutil.ReadAll(common)
-	fmt.Println(string(commonBody))
+	code += fmt.Sprintln(string(commonBody))
 
-	fmt.Println(this.pre)
-	fmt.Println("int main() {")
-	fmt.Println("init_common();")
-	fmt.Println(this.main)
-	fmt.Println("}")
+	code += fmt.Sprintln(this.pre)
+	code += fmt.Sprintln("int main() {")
+	code += fmt.Sprintln("init_common();")
+	code += fmt.Sprintln(this.main)
+	code += fmt.Sprintln("}")
+	return code
 }
 
 var sanitizeMatchers map[string]*regexp.Regexp
@@ -422,6 +428,7 @@ func emitSymbol(cell *cell, env *environment) {
 	env.pushRet(newRet(C_STRING, symName))
 }
 
+// TODO throw err
 func emit(cell *cell, env *environment) {
 	switch cell.typeId {
 	case LISP_NUM:
@@ -573,12 +580,11 @@ func emit(cell *cell, env *environment) {
 
 				d := env.find(retName)
 				if d == nil {
-					env.registVar(retName)
-					// expect INT
-					env.putsMain(fmt.Sprintf("List *%s = make_int(%s);", retName, value))
-				} else {
-					env.putsMain(fmt.Sprintf("%s = make_int(%s);", retName, value))
+					//env.registVar(retName)
+					env.registGlobal(retName)
+					env.putsPre(fmt.Sprintf("List *%s;", retName))
 				}
+				env.putsMain(fmt.Sprintf("%s = make_int(%s);", retName, value))
 
 				// maybe need care about a collision with system variables,
 				// especially in case of invalid type.
@@ -820,9 +826,8 @@ func readFrom(buf *TokenBuffer) (*cell, error) {
 	}
 }
 
-func main() {
-	flag.Parse()
-	srcPath, err := filepath.Abs(flag.Args()[0])
+func compile(src string) (string, error) {
+	srcPath, err := filepath.Abs(src)
 	if err != nil {
 		panic(err)
 	}
@@ -831,11 +836,59 @@ func main() {
 
 	cell, err := readFrom(tokenize(srcCnt))
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 
 	env := newGlobalEnv()
 	emit(cell, env)
 
-	env.print()
+	return env.toClang(), nil
+}
+
+var (
+	cmpOpt = flag.Bool("S", false, "compile only")
+	outOpt = flag.String("o", "", "output into the file")
+)
+
+func main() {
+	flag.Parse()
+	target := flag.Args()[0]
+
+	content, err := compile(target)
+	if err != nil {
+		panic(err)
+	}
+
+	//tmpfile, err := ioutil.TempFile("./tmp/", "c")
+	tmpfile, err := ioutil.TempFile("./", "c")
+	if err != nil {
+		panic(err)
+	}
+	filename := tmpfile.Name() + ".c"
+	if *cmpOpt {
+		if len(*outOpt) > 0 {
+			filename = *outOpt
+		} else {
+			filename = filepath.Base(target) + ".c"
+		}
+	}
+
+	tmpfile.Write([]byte(content))
+	err = os.Rename(tmpfile.Name(), filename)
+	if err != nil {
+		panic(err)
+	}
+
+	if !*cmpOpt {
+		defer os.Remove(filename)
+
+		objName := "a.out"
+		if len(*outOpt) > 0 {
+			objName = *outOpt
+		}
+		cmd := exec.Command("gcc", "-o", objName, filename)
+		if err := cmd.Run(); err != nil {
+			panic("gcc error")
+		}
+	}
 }
