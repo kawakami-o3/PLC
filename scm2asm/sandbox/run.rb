@@ -5,7 +5,12 @@ def build
 end
 
 def run v
-	system "../scm2asm.exe #{v} > scheme_entry.s"
+
+	if v.to_s[0] == '#' || v.to_s[0] == '('
+		system "../scm2asm.exe '#{v}' > scheme_entry.s"
+	else
+		system "../scm2asm.exe #{v} > scheme_entry.s"
+	end
 	system "gcc -o a.out scheme_entry.s main.c"
 	a = `./a.out`
 
@@ -24,5 +29,12 @@ build
 
 run 0
 run 42
+run 'a'
+run 'z'
+run 'M'
+run '#t'
+run '#f'
+run '()'
+
 
 
