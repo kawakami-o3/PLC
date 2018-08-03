@@ -10,13 +10,13 @@ func emit(s string, v ...interface{}) {
 }
 
 func compileProgram(x string) {
-	emit(".text")
-	emit(".p2align 4,,15")
-	emit(".globl scheme_entry")
-	emit(".type scheme_entry, @function")
+	emit("\t.text")
+	emit("\t.p2align 4,,15")
+	emit("\t.globl scheme_entry")
+	emit("\t.type scheme_entry, @function")
 	emit("scheme_entry:")
-	emit("movl %v %%eax", x)
-	emit("ret")
+	emit("\tmovl $%v, %%eax", x)
+	emit("\tret")
 }
 
 func main() {
