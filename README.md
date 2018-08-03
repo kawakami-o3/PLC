@@ -1,5 +1,5 @@
 # PLC
-pure lisp compiler
+poorman's lisp compiler
 
 # Installation
 
