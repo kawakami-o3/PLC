@@ -4,7 +4,9 @@ def build
 	system "cd ../ && bash run.sh"
 end
 
-def run v
+def run v, result = nil
+	result ||= v
+	result = result.to_s
 
 	if v.to_s[0] == '#' || v.to_s[0] == '('
 		system "../scm2asm.exe '#{v}' > scheme_entry.s"
@@ -15,10 +17,10 @@ def run v
 	a = `./a.out`
 
 	a.chomp!
-	if a == v.to_s
+	if a == result
 		puts "OK: #{v}"
 	else
-		puts "NG: result #{a.chomp}, expected #{v}"
+		puts "NG: result #{a.chomp}, expected #{result}"
 	end
 
 	File.delete("a.out")
@@ -35,6 +37,10 @@ run 'M'
 run '#t'
 run '#f'
 run '()'
+run '(add1 3)', 4
+run '(sub1 3)', 2
+run '(integer->char 65)', 'A'
+run '(char->integer A)', '65'
 
 
 
