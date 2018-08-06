@@ -21,6 +21,7 @@ def run v, result = nil
 		puts "OK: #{v}"
 	else
 		puts "NG: result #{a.chomp}, expected #{result}"
+		puts open("scheme_entry.s").read
 	end
 
 	File.delete("a.out")
@@ -28,6 +29,8 @@ def run v, result = nil
 end
 
 build
+
+
 
 run 0
 run 42
@@ -41,6 +44,19 @@ run '(add1 3)', 4
 run '(sub1 3)', 2
 run '(integer->char 65)', 'A'
 run '(char->integer A)', '65'
+run '(zero? 1)', '#f'
+run '(zero? 0)', '#t'
+run '(null? ())', '#t'
+run '(null? 1)', '#f'
+run '(not #t)', '#f'
+run '(not #f)', '#t'
+
+run '(integer? 1)', '#t'
+run '(integer? a)', '#f'
+run '(integer? #t)', '#f'
+run '(boolean? #t)', '#t'
+run '(boolean? 8)', '#f'
+run '(boolean? c)', '#f'
 
 
 

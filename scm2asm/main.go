@@ -17,6 +17,8 @@ const (
 	charTag     = 0x0F
 	boolShift   = 7
 	boolTag     = 0x1F
+	boolTrue    = 1<<boolShift + boolTag
+	boolFalse   = 0<<boolShift + boolTag
 	emptyList   = 0x2F
 )
 
@@ -30,9 +32,9 @@ func immediateRep(x string) int {
 	case "()":
 		return emptyList
 	case "#t":
-		return 1<<boolShift + boolTag
+		return boolTrue
 	case "#f":
-		return 0<<boolShift + boolTag
+		return boolFalse
 	default:
 		return int(x[0])<<charShift + charTag
 	}
@@ -40,15 +42,6 @@ func immediateRep(x string) int {
 
 func isImmediate(e Expr) bool {
 	return e.value != ""
-	/*
-		if e.value != "" {
-			return true
-		}
-		if len(e.list) == 0 {
-			return true
-		}
-		return false
-	*/
 }
 
 func isPrimcall(e Expr) bool {
@@ -74,23 +67,49 @@ var primcallOpList = []string{
 	"sub1",
 	"integer->char",
 	"char->integer",
+	"zero?",
+	"null?",
+	"not",
+	"integer?",
+	"boolean?",
+}
+
+func emitComp(target int) {
+	emit("\tcmpl $%d, %%eax", target)
+	emit("\tmovl $0, %%eax")
+	emit("\tsete %%al")
+	emit("\tsall $%d, %%eax", boolShift)
+	emit("\torl $%d, %%eax", boolTag)
 }
 
 func emitExpr(expr Expr) {
 	if isImmediate(expr) {
 		emit("\tmovl $%d, %%eax", immediateRep(expr.value))
 	} else if isPrimcall(expr) {
+		emitExpr(primcallOperand1(expr))
+
 		switch primcallOp(expr).value {
 		case "add1":
-			emitExpr(primcallOperand1(expr))
 			emit("\taddl $%d, %%eax", immediateRep("1"))
 		case "sub1":
-			emitExpr(primcallOperand1(expr))
 			emit("\tsubl $%d, %%eax", immediateRep("1"))
 		case "integer->char":
-			emit("\tmovl $%d, %%eax", immediateRep(primcallOperand1(expr).value)<<(charShift-fixnumShift)+charTag)
+			emit("\tsall $%d, %%eax", charShift-fixnumShift)
+			emit("\torl $%d, %%eax", charTag)
 		case "char->integer":
-			emit("\tmovl $%d, %%eax", immediateRep(primcallOperand1(expr).value)>>(charShift-fixnumShift))
+			emit("\tsarl $%d, %%eax", charShift-fixnumShift)
+		case "zero?":
+			emitComp(0)
+		case "null?":
+			emitComp(emptyList)
+		case "not":
+			emitComp(boolFalse)
+		case "integer?":
+			emit("\tandl $%d, %%eax", 1<<fixnumShift-1)
+			emitComp(fixnumTag)
+		case "boolean?":
+			emit("\tandl $%d, %%eax", 1<<boolShift-1)
+			emitComp(boolTag)
 		}
 
 	} else {
@@ -102,8 +121,6 @@ type Expr struct {
 	value string
 	list  []Expr
 }
-
-//func parse(buf *bytes.Buffer) Expr {
 
 type tokenBuffer struct {
 	tokens []string
@@ -136,13 +153,26 @@ func tokenize(x string) *tokenBuffer {
 		if c == ' ' || c == '\n' || c == '\t' {
 			if len(t) > 0 {
 				tokens = append(tokens, t)
+				t = ""
 			}
-			t = ""
+		} else if c == ')' {
+			if len(t) == 0 {
+				// TODO quote
+				if tokens[len(tokens)-1] == "(" {
+					tokens[len(tokens)-1] += ")"
+				} else {
+					tokens = append(tokens, string(c))
+				}
+			} else {
+				tokens = append(tokens, t)
+				t = ""
+				tokens = append(tokens, string(c))
+			}
 		} else if c == '(' || c == ')' {
 			if len(t) > 0 {
 				tokens = append(tokens, t)
+				t = ""
 			}
-			t = ""
 
 			tokens = append(tokens, string(c))
 		} else {
@@ -182,14 +212,8 @@ func parse(x string) Expr {
 	for tokens.hasNext() {
 		tokens.next()
 		e := makeExpr(tokens)
-		//pp.Println(e)
 		exprs = append(exprs, e)
 	}
-	/*
-		pp.Println(tokens)
-		pp.Println(exprs)
-		panic("--")
-	*/
 
 	if len(exprs) == 1 {
 		return exprs[0]
@@ -206,8 +230,6 @@ func compileProgram(x string) {
 	emit("\t.globl scheme_entry")
 	emit("\t.type scheme_entry, @function")
 	emit("scheme_entry:")
-	//emit("\tmovl $%d, %%eax", immediateRep(x))
-	//emitExpr(parse(bytes.NewBufferString(x)))
 	emitExpr(parse(x))
 	emit("\tret")
 }

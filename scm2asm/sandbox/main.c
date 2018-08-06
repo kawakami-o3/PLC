@@ -27,6 +27,8 @@ int main(int argc, char** argv) {
 		printf("%s\n", val >> bool_shift ? "#t" : "#f");
 	} else if (val == empty_list) {
 		printf("()\n");
+	} else {
+		printf("error %x\n", val);
 	}
 
 	return 0;
