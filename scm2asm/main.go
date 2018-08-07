@@ -23,6 +23,10 @@ const (
 
 	stackIndexInit = -4
 	wordSize       = 4
+
+	tokenTrue = "#t"
+	tokenFalse = "#f"
+	tokenEmpty = "()"
 )
 
 func immediateRep(x string) int {
@@ -37,14 +41,18 @@ func immediateRep(x string) int {
 	}
 
 	switch x {
-	case "()":
+	case tokenEmpty:
 		return emptyList
-	case "#t":
+	case tokenTrue:
 		return boolTrue
-	case "#f":
+	case tokenFalse:
 		return boolFalse
 	}
 	panic(fmt.Sprintf("not implemented, %s", x))
+}
+
+func isBool(e Expr) bool {
+	return e.value == tokenTrue || e.value == tokenFalse
 }
 
 func isImmediate(e Expr) bool {
