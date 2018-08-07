@@ -20,12 +20,20 @@ const (
 	boolTrue    = 1<<boolShift + boolTag
 	boolFalse   = 0<<boolShift + boolTag
 	emptyList   = 0x2F
+
+	stackIndexInit = -4
+	wordSize       = 4
 )
 
 func immediateRep(x string) int {
 	i, err := strconv.Atoi(x)
 	if err == nil {
 		return i << fixnumShift
+	}
+
+	// char
+	if len(x) == 3 && x[0:2] == "#\\" {
+		return int(x[2])<<charShift + charTag
 	}
 
 	switch x {
@@ -35,9 +43,8 @@ func immediateRep(x string) int {
 		return boolTrue
 	case "#f":
 		return boolFalse
-	default:
-		return int(x[0])<<charShift + charTag
 	}
+	panic(fmt.Sprintf("not implemented, %s", x))
 }
 
 func isImmediate(e Expr) bool {
@@ -62,6 +69,32 @@ func primcallOperand1(e Expr) Expr {
 	return e.list[1]
 }
 
+func primcallOperand2(e Expr) Expr {
+	return e.list[2]
+}
+
+func emitEq(target int) {
+	emit("\tcmpl $%d, %%eax", target)
+	emit("\tmovl $0, %%eax")
+	emit("\tsete %%al")
+	emit("\tsall $%d, %%eax", boolShift)
+	emit("\torl $%d, %%eax", boolTag)
+}
+
+func emitCompStack(op string, si int) {
+	emit("\tcmpl %d(%%rsp), %%eax", si)
+	emit("\tmovl $0, %%eax")
+	emit("\t%s %%al", op)
+	emit("\tsall $%d, %%eax", boolShift)
+	emit("\torl $%d, %%eax", boolTag)
+}
+
+func emitOperand2(expr Expr, si int) {
+	emitExpr(primcallOperand2(expr), si)
+	emit("\tmovl %%eax, %d(%%rsp)", si)
+	emitExpr(primcallOperand1(expr), si-wordSize)
+}
+
 var primcallOpList = []string{
 	"add1",
 	"sub1",
@@ -72,46 +105,85 @@ var primcallOpList = []string{
 	"not",
 	"integer?",
 	"boolean?",
+	"+",
+	"-",
+	"*",
+	"=",
+	"<",
+	"<=",
+	">",
+	">=",
+	"char=?",
 }
 
-func emitComp(target int) {
-	emit("\tcmpl $%d, %%eax", target)
-	emit("\tmovl $0, %%eax")
-	emit("\tsete %%al")
-	emit("\tsall $%d, %%eax", boolShift)
-	emit("\torl $%d, %%eax", boolTag)
+func emitPrimitiveCall(expr Expr, si int) {
+	switch primcallOp(expr).value {
+	case "add1":
+		emitExpr(primcallOperand1(expr), si)
+		emit("\taddl $%d, %%eax", immediateRep("1"))
+	case "sub1":
+		emitExpr(primcallOperand1(expr), si)
+		emit("\tsubl $%d, %%eax", immediateRep("1"))
+	case "integer->char":
+		emitExpr(primcallOperand1(expr), si)
+		emit("\tsall $%d, %%eax", charShift-fixnumShift)
+		emit("\torl $%d, %%eax", charTag)
+	case "char->integer":
+		emitExpr(primcallOperand1(expr), si)
+		emit("\tsarl $%d, %%eax", charShift-fixnumShift)
+	case "zero?":
+		emitExpr(primcallOperand1(expr), si)
+		emitEq(0)
+	case "null?":
+		emitExpr(primcallOperand1(expr), si)
+		emitEq(emptyList)
+	case "not":
+		emitExpr(primcallOperand1(expr), si)
+		emitEq(boolFalse)
+	case "integer?":
+		emitExpr(primcallOperand1(expr), si)
+		emit("\tandl $%d, %%eax", 1<<fixnumShift-1)
+		emitEq(fixnumTag)
+	case "boolean?":
+		emitExpr(primcallOperand1(expr), si)
+		emit("\tandl $%d, %%eax", 1<<boolShift-1)
+		emitEq(boolTag)
+	case "+":
+		emitOperand2(expr, si)
+		emit("\taddl %d(%%rsp), %%eax", si)
+	case "-":
+		emitOperand2(expr, si)
+		emit("\tsubl %d(%%rsp), %%eax", si)
+	case "*":
+		emitOperand2(expr, si)
+		emit("\timull %d(%%rsp), %%eax", si)
+		emit("sarl $%d, %%eax", fixnumShift)
+	case "=":
+		emitOperand2(expr, si)
+		emitCompStack("sete", si)
+	case "<":
+		emitOperand2(expr, si)
+		emitCompStack("setl", si)
+	case "<=":
+		emitOperand2(expr, si)
+		emitCompStack("setle", si)
+	case ">":
+		emitOperand2(expr, si)
+		emitCompStack("setg", si)
+	case ">=":
+		emitOperand2(expr, si)
+		emitCompStack("setge", si)
+	case "char=?":
+		emitOperand2(expr, si)
+		emitCompStack("sete", si)
+	}
 }
 
-func emitExpr(expr Expr) {
+func emitExpr(expr Expr, si int) {
 	if isImmediate(expr) {
 		emit("\tmovl $%d, %%eax", immediateRep(expr.value))
 	} else if isPrimcall(expr) {
-		emitExpr(primcallOperand1(expr))
-
-		switch primcallOp(expr).value {
-		case "add1":
-			emit("\taddl $%d, %%eax", immediateRep("1"))
-		case "sub1":
-			emit("\tsubl $%d, %%eax", immediateRep("1"))
-		case "integer->char":
-			emit("\tsall $%d, %%eax", charShift-fixnumShift)
-			emit("\torl $%d, %%eax", charTag)
-		case "char->integer":
-			emit("\tsarl $%d, %%eax", charShift-fixnumShift)
-		case "zero?":
-			emitComp(0)
-		case "null?":
-			emitComp(emptyList)
-		case "not":
-			emitComp(boolFalse)
-		case "integer?":
-			emit("\tandl $%d, %%eax", 1<<fixnumShift-1)
-			emitComp(fixnumTag)
-		case "boolean?":
-			emit("\tandl $%d, %%eax", 1<<boolShift-1)
-			emitComp(boolTag)
-		}
-
+		emitPrimitiveCall(expr, si)
 	} else {
 		//
 	}
@@ -230,7 +302,7 @@ func compileProgram(x string) {
 	emit("\t.globl scheme_entry")
 	emit("\t.type scheme_entry, @function")
 	emit("scheme_entry:")
-	emitExpr(parse(x))
+	emitExpr(parse(x), stackIndexInit)
 	emit("\tret")
 }
 
