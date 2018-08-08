@@ -82,6 +82,16 @@ func isImmediate(e Expr) bool {
 	return err == nil
 }
 
+func isVariable(e Expr) bool {
+	// TODO
+	return false
+}
+
+func isLet(e Expr) bool {
+	// TODO
+	return false
+}
+
 func isPrimcall(e Expr) bool {
 	op := primcallOp(e).value
 	for _, s := range primcallOpList {
@@ -217,6 +227,10 @@ func emitExpr(expr Expr, si int) {
 			panic(err)
 		}
 		emit("\tmovl $%d, %%eax", n)
+	} else if isVariable(expr) {
+		// TODO
+	} else if isLet(expr) {
+		// TODO
 	} else if isPrimcall(expr) {
 		emitPrimitiveCall(expr, si)
 	} else {
