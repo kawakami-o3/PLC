@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"strconv"
@@ -18,13 +19,15 @@ const (
 	fixnumUpper = 1<<fixnumBits - 1
 	fixnumShift = 2
 	fixnumTag   = 0x00
-	charShift   = 8
-	charTag     = 0x0F
-	boolShift   = 7
-	boolTag     = 0x1F
-	boolTrue    = 1<<boolShift + boolTag
-	boolFalse   = 0<<boolShift + boolTag
-	emptyList   = 0x2F
+	fixnum1     = 1 << fixnumShift
+
+	charShift = 8
+	charTag   = 0x0F
+	boolShift = 7
+	boolTag   = 0x1F
+	boolTrue  = 1<<boolShift + boolTag
+	boolFalse = 0<<boolShift + boolTag
+	emptyList = 0x2F
 
 	stackIndexInit = -4
 	wordSize       = 4
@@ -34,40 +37,49 @@ const (
 	tokenEmpty = "()"
 )
 
-func immediateRep(x string) int {
+func immediateRep(x string) (int, error) {
 	i, err := strconv.Atoi(x)
 	if err == nil {
-		return i << fixnumShift
+		return i << fixnumShift, nil
 	}
 
 	// char
 	if len(x) >= 3 && x[0:2] == "#\\" {
 		if x == "#\\space" {
-			return int(' ')<<charShift + charTag
+			return int(' ')<<charShift + charTag, nil
 		} else if x == "#\\newline" {
-			return int('\n')<<charShift + charTag
+			return int('\n')<<charShift + charTag, nil
 		} else {
-			return int(x[2])<<charShift + charTag
+			return int(x[2])<<charShift + charTag, nil
 		}
 	}
 
 	switch x {
 	case tokenEmpty:
-		return emptyList
+		return emptyList, nil
 	case tokenTrue:
-		return boolTrue
+		return boolTrue, nil
 	case tokenFalse:
-		return boolFalse
+		return boolFalse, nil
 	}
-	panic(fmt.Sprintf("not implemented, %s", x))
+	return -1, errors.New(fmt.Sprintf("not an immediate, %s", x))
 }
 
+/*
+// TODO use in isImmediate
 func isBool(e Expr) bool {
 	return e.value == tokenTrue || e.value == tokenFalse
 }
+*/
 
 func isImmediate(e Expr) bool {
-	return e.value != ""
+	x := e.value
+	if len(x) == 0 {
+		return false
+	}
+
+	_, err := immediateRep(e.value)
+	return err == nil
 }
 
 func isPrimcall(e Expr) bool {
@@ -139,10 +151,10 @@ func emitPrimitiveCall(expr Expr, si int) {
 	switch primcallOp(expr).value {
 	case "add1":
 		emitExpr(primcallOperand1(expr), si)
-		emit("\taddl $%d, %%eax", immediateRep("1"))
+		emit("\taddl $%d, %%eax", fixnum1)
 	case "sub1":
 		emitExpr(primcallOperand1(expr), si)
-		emit("\tsubl $%d, %%eax", immediateRep("1"))
+		emit("\tsubl $%d, %%eax", fixnum1)
 	case "integer->char":
 		emitExpr(primcallOperand1(expr), si)
 		emit("\tsall $%d, %%eax", charShift-fixnumShift)
@@ -200,7 +212,11 @@ func emitPrimitiveCall(expr Expr, si int) {
 
 func emitExpr(expr Expr, si int) {
 	if isImmediate(expr) {
-		emit("\tmovl $%d, %%eax", immediateRep(expr.value))
+		n, err := immediateRep(expr.value)
+		if err != nil {
+			panic(err)
+		}
+		emit("\tmovl $%d, %%eax", n)
 	} else if isPrimcall(expr) {
 		emitPrimitiveCall(expr, si)
 	} else {
