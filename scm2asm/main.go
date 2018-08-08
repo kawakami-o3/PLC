@@ -11,6 +11,11 @@ func emit(s string, v ...interface{}) {
 }
 
 const (
+	byteSize = 8
+
+	fixnumBits  = wordSize*byteSize - fixnumShift
+	fixnumLower = -(1 << fixnumBits)
+	fixnumUpper = 1<<fixnumBits - 1
 	fixnumShift = 2
 	fixnumTag   = 0x00
 	charShift   = 8
@@ -24,7 +29,7 @@ const (
 	stackIndexInit = -4
 	wordSize       = 4
 
-	tokenTrue = "#t"
+	tokenTrue  = "#t"
 	tokenFalse = "#f"
 	tokenEmpty = "()"
 )
@@ -36,8 +41,14 @@ func immediateRep(x string) int {
 	}
 
 	// char
-	if len(x) == 3 && x[0:2] == "#\\" {
-		return int(x[2])<<charShift + charTag
+	if len(x) >= 3 && x[0:2] == "#\\" {
+		if x == "#\\space" {
+			return int(' ')<<charShift + charTag
+		} else if x == "#\\newline" {
+			return int('\n')<<charShift + charTag
+		} else {
+			return int(x[2])<<charShift + charTag
+		}
 	}
 
 	switch x {
