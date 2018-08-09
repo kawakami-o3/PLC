@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"strconv"
+	"unicode"
 )
 
 func emit(s string, v ...interface{}) {
@@ -82,14 +83,100 @@ func isImmediate(e expression) bool {
 	return err == nil
 }
 
+var (
+	specialInitial = map[byte]int{
+		'!': 0,
+		'$': 0,
+		'%': 0,
+		'&': 0,
+		'*': 0,
+		'/': 0,
+		':': 0,
+		'<': 0,
+		'=': 0,
+		'>': 0,
+		'?': 0,
+		'^': 0,
+		'_': 0,
+		'~': 0,
+	}
+
+	specialSubsequent = map[byte]int{
+		'+': 0,
+		'-': 0,
+		'.': 0,
+		'@': 0,
+	}
+
+	syntacticKeyword = map[string]int{
+		"else":             0,
+		"=>":               0,
+		"define":           0,
+		"unquote":          0,
+		"unquote-splicing": 0,
+		"quote":            0,
+		"lambda":           0,
+		"if":               0,
+		"set!":             0,
+		"begin":            0,
+		"cond":             0,
+		"and":              0,
+		"or":               0,
+		"case":             0,
+		"let":              0,
+		"let*":             0,
+		"letrec":           0,
+		"do":               0,
+		"delay":            0,
+		"quasiquote":       0,
+	}
+
+	peculiarIdentifier = map[string]int{
+		"+":   0,
+		"-":   0,
+		"...": 0,
+	}
+)
+
+func isInitial(c byte) bool {
+	_, ok := specialInitial[c]
+	return ok || unicode.IsLetter(rune(c))
+}
+
+func isSubsequent(c byte) bool {
+	_, ok := specialSubsequent[c]
+	return isInitial(c) || unicode.IsDigit(rune(c)) || ok
+}
+
 func isVariable(e expression) bool {
-	// TODO
-	return false
+	x := e.value
+	if len(x) == 0 {
+		return false
+	}
+
+	_, ng := syntacticKeyword[x]
+	if ng {
+		return false
+	}
+
+	_, piOk := peculiarIdentifier[x]
+	if piOk {
+		return true
+	}
+
+	if !isInitial(e.value[0]) {
+		return false
+	}
+	for _, c := range e.value[1:] {
+		if !isSubsequent(byte(c)) {
+			return false
+		}
+	}
+	return true
 }
 
 func isLet(e expression) bool {
-	// TODO
-	return false
+	return len(e.list) > 0 && e.list[0].value == "let"
 }
 
 func isPrimcall(e expression) bool {
@@ -130,10 +217,10 @@ func emitCompStack(op string, si int) {
 	emit("\torl $%d, %%eax", boolTag)
 }
 
-func emitOperand2(expr expression, si int) {
-	emitExpr(primcallOperand2(expr), si)
+func emitOperand2(expr expression, si int, env *environment) {
+	emitExpr(primcallOperand2(expr), si, env)
 	emit("\tmovl %%eax, %d(%%rsp)", si)
-	emitExpr(primcallOperand1(expr), si-wordSize)
+	emitExpr(primcallOperand1(expr), si-wordSize, env)
 }
 
 var primcallOpList = []string{
@@ -157,86 +244,134 @@ var primcallOpList = []string{
 	"char=?",
 }
 
-func emitPrimitiveCall(expr expression, si int) {
+func emitPrimitiveCall(expr expression, si int, env *environment) {
 	switch primcallOp(expr).value {
 	case "add1":
-		emitExpr(primcallOperand1(expr), si)
+		emitExpr(primcallOperand1(expr), si, env)
 		emit("\taddl $%d, %%eax", fixnum1)
 	case "sub1":
-		emitExpr(primcallOperand1(expr), si)
+		emitExpr(primcallOperand1(expr), si, env)
 		emit("\tsubl $%d, %%eax", fixnum1)
 	case "integer->char":
-		emitExpr(primcallOperand1(expr), si)
+		emitExpr(primcallOperand1(expr), si, env)
 		emit("\tsall $%d, %%eax", charShift-fixnumShift)
 		emit("\torl $%d, %%eax", charTag)
 	case "char->integer":
-		emitExpr(primcallOperand1(expr), si)
+		emitExpr(primcallOperand1(expr), si, env)
 		emit("\tsarl $%d, %%eax", charShift-fixnumShift)
 	case "zero?":
-		emitExpr(primcallOperand1(expr), si)
+		emitExpr(primcallOperand1(expr), si, env)
 		emitEq(0)
 	case "null?":
-		emitExpr(primcallOperand1(expr), si)
+		emitExpr(primcallOperand1(expr), si, env)
 		emitEq(emptyList)
 	case "not":
-		emitExpr(primcallOperand1(expr), si)
+		emitExpr(primcallOperand1(expr), si, env)
 		emitEq(boolFalse)
 	case "integer?":
-		emitExpr(primcallOperand1(expr), si)
+		emitExpr(primcallOperand1(expr), si, env)
 		emit("\tandl $%d, %%eax", 1<<fixnumShift-1)
 		emitEq(fixnumTag)
 	case "boolean?":
-		emitExpr(primcallOperand1(expr), si)
+		emitExpr(primcallOperand1(expr), si, env)
 		emit("\tandl $%d, %%eax", 1<<boolShift-1)
 		emitEq(boolTag)
 	case "+":
-		emitOperand2(expr, si)
+		emitOperand2(expr, si, env)
 		emit("\taddl %d(%%rsp), %%eax", si)
 	case "-":
-		emitOperand2(expr, si)
+		emitOperand2(expr, si, env)
 		emit("\tsubl %d(%%rsp), %%eax", si)
 	case "*":
-		emitOperand2(expr, si)
+		emitOperand2(expr, si, env)
 		emit("\timull %d(%%rsp), %%eax", si)
 		emit("sarl $%d, %%eax", fixnumShift)
 	case "=":
-		emitOperand2(expr, si)
+		emitOperand2(expr, si, env)
 		emitCompStack("sete", si)
 	case "<":
-		emitOperand2(expr, si)
+		emitOperand2(expr, si, env)
 		emitCompStack("setl", si)
 	case "<=":
-		emitOperand2(expr, si)
+		emitOperand2(expr, si, env)
 		emitCompStack("setle", si)
 	case ">":
-		emitOperand2(expr, si)
+		emitOperand2(expr, si, env)
 		emitCompStack("setg", si)
 	case ">=":
-		emitOperand2(expr, si)
+		emitOperand2(expr, si, env)
 		emitCompStack("setge", si)
 	case "char=?":
-		emitOperand2(expr, si)
+		emitOperand2(expr, si, env)
 		emitCompStack("sete", si)
 	}
 }
 
 type environment struct {
-    // TODO
+	variables map[string]int
 }
 
-func (env *environment) lookup(x string) (int, error) {
-    // TODO
-    return 0,nil
+func newEnv() *environment {
+	env := &environment{}
+	env.variables = map[string]int{}
+	return env
 }
 
-func emitLet(bindings [], body, si int, env *environment) {
-    if len(bindings) == 0 {
-    } else {
-        b := bindings[0]
-        emitExpr(rhs(b), si, env)
+func (env *environment) lookup(x expression) (int, error) {
+	si, ok := env.variables[x.value]
+	if ok {
+		return si, nil
+	} else {
+		return 0, errors.New(fmt.Sprintf("variable not found: %s", x.value))
+	}
+}
 
-    }
+func (env *environment) extend(e expression, si int) {
+	env.variables[e.value] = si
+}
 
+func lhs(e expression) expression {
+	return e.list[0]
+}
+
+func rhs(e expression) expression {
+	return e.list[1]
+}
+
+func bindings(e expression) []expression {
+	// named let
+	if len(e.list[1].value) > 0 {
+		return e.list[2].list
+	} else {
+		return e.list[1].list
+	}
+}
+
+func body(e expression) expression {
+	i := 2
+	if len(e.list[1].value) > 0 {
+		i += 1
+	}
+
+	if i+1 == len(e.list) {
+		return e.list[i]
+	} else {
+		ret := expression{}
+		ret.list = e.list[i:]
+		return ret
+	}
+}
+
+func emitLet(bindings []expression, body expression, si int, env *environment) {
+	if len(bindings) == 0 {
+		emitExpr(body, si, env)
+	} else {
+		b := bindings[0]
+		emitExpr(rhs(b), si, env)
+		emit("\tmovl %%eax, %d(%%rsp)", si)
+		env.extend(lhs(b), si)
+		emitLet(bindings[1:], body, si-wordSize, env)
+	}
 }
 
 func emitExpr(expr expression, si int, env *environment) {
@@ -247,15 +382,15 @@ func emitExpr(expr expression, si int, env *environment) {
 		}
 		emit("\tmovl $%d, %%eax", n)
 	} else if isVariable(expr) {
-        n, err := env.lookup(expr)
-        if err != nil {
-            panic(err)
-        }
+		n, err := env.lookup(expr)
+		if err != nil {
+			panic(err)
+		}
 		emit("\tmovl %d(%%rsp), %%eax", n)
 	} else if isLet(expr) {
-        emitLet(bindings(expr), body(expr), si, env)
+		emitLet(bindings(expr), body(expr), si, env)
 	} else if isPrimcall(expr) {
-		emitPrimitiveCall(expr, si)
+		emitPrimitiveCall(expr, si, env)
 	} else {
 		//
 	}
@@ -335,7 +470,6 @@ func makeExpr(tokens *tokenBuffer) expression {
 			expr := makeExpr(tokens)
 			ret.list = append(ret.list, expr)
 		}
-		tokens.consume()
 
 		if len(ret.list) == 0 {
 			ret.value = "()"
@@ -374,7 +508,7 @@ func compileProgram(x string) {
 	emit("\t.globl scheme_entry")
 	emit("\t.type scheme_entry, @function")
 	emit("scheme_entry:")
-	emitExpr(parse(x), stackIndexInit)
+	emitExpr(parse(x), stackIndexInit, newEnv())
 	emit("\tret")
 }
 

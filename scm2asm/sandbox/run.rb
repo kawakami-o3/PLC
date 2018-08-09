@@ -76,6 +76,8 @@ run '(>= 10 10)', '#t'
 run '(>= 11 10)', '#t'
 run '(char=? #\a #\a)', '#t'
 run '(char=? #\a #\c)', '#f'
+run '(let ((a 1)) a)', 1
+run '(let ((a 1)) (+ a 3))', 4
 
 
 
