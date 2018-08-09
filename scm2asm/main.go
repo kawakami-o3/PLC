@@ -175,6 +175,14 @@ func isVariable(e expression) bool {
 	return true
 }
 
+func isIf(e expression) bool {
+	if len(e.list) == 0 {
+		return false
+	}
+
+	return e.list[0].value == "if"
+}
+
 func isLet(e expression) bool {
 	if len(e.list) == 0 {
 		return false
@@ -379,6 +387,38 @@ func emitLet(bindings []expression, body expression, si int, env *environment) {
 	}
 }
 
+var labelCount = 0
+
+func uniqueLabel() string {
+	labelCount++
+	return fmt.Sprintf("L%d", labelCount)
+}
+
+func emitJe(label string) {
+	emit("\tje %s", label)
+}
+
+func emitJmp(label string) {
+	emit("\tjmp %s", label)
+}
+
+func emitLabel(label string) {
+	emit("%s:", label)
+}
+
+func emitIf(test, conseq, altern expression, si int, env *environment) {
+	L0 := uniqueLabel()
+	L1 := uniqueLabel()
+	emitExpr(test, si, env)
+	emit("\tcmpl $%d, %%eax", boolFalse)
+	emitJe(L0)
+	emitExpr(conseq, si, env)
+	emitJmp(L1)
+	emitLabel(L0)
+	emitExpr(altern, si, env)
+	emitLabel(L1)
+}
+
 func emitExpr(expr expression, si int, env *environment) {
 	if isImmediate(expr) {
 		n, err := immediateRep(expr.value)
@@ -392,6 +432,8 @@ func emitExpr(expr expression, si int, env *environment) {
 			panic(err)
 		}
 		emit("\tmovl %d(%%rsp), %%eax", n)
+	} else if isIf(expr) {
+		emitIf(expr.list[1], expr.list[2], expr.list[3], si, env)
 	} else if isLet(expr) {
 		emitLet(bindings(expr), body(expr), si, env)
 	} else if isPrimcall(expr) {
