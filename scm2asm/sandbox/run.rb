@@ -78,6 +78,7 @@ run '(char=? #\a #\a)', '#t'
 run '(char=? #\a #\c)', '#f'
 run '(let ((a 1)) a)', 1
 run '(let ((a 1)) (+ a 3))', 4
+run '(let* ((a 2) (b (+ a 3))) (* a b))', 10
 
 
 

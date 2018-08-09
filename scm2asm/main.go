@@ -176,7 +176,12 @@ func isVariable(e expression) bool {
 }
 
 func isLet(e expression) bool {
-	return len(e.list) > 0 && e.list[0].value == "let"
+	if len(e.list) == 0 {
+		return false
+	}
+
+	v := e.list[0].value
+	return v == "let" || v == "let*"
 }
 
 func isPrimcall(e expression) bool {
