@@ -67,12 +67,12 @@ func immediateRep(x string) (int, error) {
 
 /*
 // TODO use in isImmediate
-func isBool(e Expr) bool {
+func isBool(e expression) bool {
 	return e.value == tokenTrue || e.value == tokenFalse
 }
 */
 
-func isImmediate(e Expr) bool {
+func isImmediate(e expression) bool {
 	x := e.value
 	if len(x) == 0 {
 		return false
@@ -82,17 +82,17 @@ func isImmediate(e Expr) bool {
 	return err == nil
 }
 
-func isVariable(e Expr) bool {
+func isVariable(e expression) bool {
 	// TODO
 	return false
 }
 
-func isLet(e Expr) bool {
+func isLet(e expression) bool {
 	// TODO
 	return false
 }
 
-func isPrimcall(e Expr) bool {
+func isPrimcall(e expression) bool {
 	op := primcallOp(e).value
 	for _, s := range primcallOpList {
 		if op == s {
@@ -102,15 +102,15 @@ func isPrimcall(e Expr) bool {
 	return false
 }
 
-func primcallOp(e Expr) Expr {
+func primcallOp(e expression) expression {
 	return e.list[0]
 }
 
-func primcallOperand1(e Expr) Expr {
+func primcallOperand1(e expression) expression {
 	return e.list[1]
 }
 
-func primcallOperand2(e Expr) Expr {
+func primcallOperand2(e expression) expression {
 	return e.list[2]
 }
 
@@ -130,7 +130,7 @@ func emitCompStack(op string, si int) {
 	emit("\torl $%d, %%eax", boolTag)
 }
 
-func emitOperand2(expr Expr, si int) {
+func emitOperand2(expr expression, si int) {
 	emitExpr(primcallOperand2(expr), si)
 	emit("\tmovl %%eax, %d(%%rsp)", si)
 	emitExpr(primcallOperand1(expr), si-wordSize)
@@ -157,7 +157,7 @@ var primcallOpList = []string{
 	"char=?",
 }
 
-func emitPrimitiveCall(expr Expr, si int) {
+func emitPrimitiveCall(expr expression, si int) {
 	switch primcallOp(expr).value {
 	case "add1":
 		emitExpr(primcallOperand1(expr), si)
@@ -220,7 +220,26 @@ func emitPrimitiveCall(expr Expr, si int) {
 	}
 }
 
-func emitExpr(expr Expr, si int) {
+type environment struct {
+    // TODO
+}
+
+func (env *environment) lookup(x string) (int, error) {
+    // TODO
+    return 0,nil
+}
+
+func emitLet(bindings [], body, si int, env *environment) {
+    if len(bindings) == 0 {
+    } else {
+        b := bindings[0]
+        emitExpr(rhs(b), si, env)
+
+    }
+
+}
+
+func emitExpr(expr expression, si int, env *environment) {
 	if isImmediate(expr) {
 		n, err := immediateRep(expr.value)
 		if err != nil {
@@ -228,9 +247,13 @@ func emitExpr(expr Expr, si int) {
 		}
 		emit("\tmovl $%d, %%eax", n)
 	} else if isVariable(expr) {
-		// TODO
+        n, err := env.lookup(expr)
+        if err != nil {
+            panic(err)
+        }
+		emit("\tmovl %d(%%rsp), %%eax", n)
 	} else if isLet(expr) {
-		// TODO
+        emitLet(bindings(expr), body(expr), si, env)
 	} else if isPrimcall(expr) {
 		emitPrimitiveCall(expr, si)
 	} else {
@@ -238,9 +261,9 @@ func emitExpr(expr Expr, si int) {
 	}
 }
 
-type Expr struct {
+type expression struct {
 	value string
-	list  []Expr
+	list  []expression
 }
 
 type tokenBuffer struct {
@@ -304,10 +327,10 @@ func tokenize(x string) *tokenBuffer {
 	return &tokenBuffer{tokens, -1}
 }
 
-func makeExpr(tokens *tokenBuffer) Expr {
+func makeExpr(tokens *tokenBuffer) expression {
 	t := tokens.get()
 	if t == "(" {
-		ret := Expr{}
+		ret := expression{}
 		for tokens.next() != ")" {
 			expr := makeExpr(tokens)
 			ret.list = append(ret.list, expr)
@@ -321,15 +344,15 @@ func makeExpr(tokens *tokenBuffer) Expr {
 	} else if t == ")" {
 		panic("unexpected ')'")
 	} else {
-		ret := Expr{}
+		ret := expression{}
 		ret.value = t
 		return ret
 	}
 }
 
-func parse(x string) Expr {
+func parse(x string) expression {
 	tokens := tokenize(x)
-	exprs := []Expr{}
+	exprs := []expression{}
 	for tokens.hasNext() {
 		tokens.next()
 		e := makeExpr(tokens)
@@ -339,7 +362,7 @@ func parse(x string) Expr {
 	if len(exprs) == 1 {
 		return exprs[0]
 	} else {
-		expr := Expr{}
+		expr := expression{}
 		expr.list = exprs
 		return expr
 	}
