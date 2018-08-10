@@ -8,10 +8,6 @@ import (
 	"unicode"
 )
 
-func emit(s string, v ...interface{}) {
-	fmt.Println(fmt.Sprintf(s, v...))
-}
-
 const (
 	byteSize = 8
 
@@ -214,6 +210,30 @@ func primcallOperand2(e expression) expression {
 	return e.list[2]
 }
 
+func emit(s string, v ...interface{}) {
+	fmt.Println(fmt.Sprintf(s, v...))
+}
+
+func addr(name string, index int) string {
+	if index == 0 {
+		return name
+	} else {
+		return fmt.Sprintf("%d(%s)", index, name)
+	}
+}
+
+func eax(index int) string {
+	return addr("%eax", index)
+}
+
+func rsp(index int) string {
+	return addr("%rsp", index)
+}
+
+func num(i int) string {
+	return fmt.Sprintf("$%d", i)
+}
+
 func emitEq(target int) {
 	emit("\tcmpl $%d, %%eax", target)
 	emit("\tmovl $0, %%eax")
@@ -406,11 +426,15 @@ func emitLabel(label string) {
 	emit("%s:", label)
 }
 
+func emitCmpl(a, b string) {
+	emit("\tcmpl %s, %s", a, b)
+}
+
 func emitIf(test, conseq, altern expression, si int, env *environment) {
 	L0 := uniqueLabel()
 	L1 := uniqueLabel()
 	emitExpr(test, si, env)
-	emit("\tcmpl $%d, %%eax", boolFalse)
+	emitCmpl(num(boolFalse), eax(0))
 	emitJe(L0)
 	emitExpr(conseq, si, env)
 	emitJmp(L1)
