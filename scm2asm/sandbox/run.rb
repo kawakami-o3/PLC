@@ -20,12 +20,12 @@ def run v, result = nil
 	if a == result
 		puts "OK: #{v}"
 	else
-		puts "NG: result #{a.chomp}, expected #{result}"
+		printf("NG: result #{a.chomp} (%#b), expected #{result}\n", a.chomp.to_i)
 		puts open("scheme_entry.s").read
 	end
 
-	File.delete("a.out")
-	File.delete("scheme_entry.s")
+	#File.delete("a.out")
+	#File.delete("scheme_entry.s")
 end
 
 build
@@ -82,5 +82,7 @@ run '(let* ((a 2) (b (+ a 3))) (* a b))', 10
 run '(if (= 1 1) 10 20)', 10
 run '(if (= 1 2) 10 20)', 20
 run '(if (= 1 2) 10 (+ 20 3))', 23
+
+#run '(car (cons 1 2))', 10
 
 

@@ -26,8 +26,8 @@ const (
 	boolFalse = 0<<boolShift + boolTag
 	emptyList = 0x2F
 
-	stackIndexInit = -4
 	wordSize       = 4
+	stackIndexInit = -wordSize
 
 	tokenTrue  = "#t"
 	tokenFalse = "#f"
@@ -188,6 +188,19 @@ func isLet(e expression) bool {
 	return v == "let" || v == "let*"
 }
 
+func isCarCdr(op string) bool {
+	if len(op) >= 3 && op[0] == 'c' && op[len(op)-1] == 'r' {
+		for i := 1; i < len(op)-1; i++ {
+			c := op[i]
+			if c != 'a' && c != 'd' {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
 func isPrimcall(e expression) bool {
 	op := primcallOp(e).value
 	for _, s := range primcallOpList {
@@ -195,7 +208,7 @@ func isPrimcall(e expression) bool {
 			return true
 		}
 	}
-	return false
+	return isCarCdr(op)
 }
 
 func primcallOp(e expression) expression {
@@ -230,6 +243,11 @@ func rsp(index int) string {
 	return addr("%rsp", index)
 }
 
+func esi(index int) string {
+	//return fmt.Sprintf("%d(%%esi)", index)
+	return addr("%%esi", index)
+}
+
 func num(i int) string {
 	return fmt.Sprintf("$%d", i)
 }
@@ -250,10 +268,40 @@ func emitCompStack(op string, si int) {
 	emit("\torl $%d, %%eax", boolTag)
 }
 
+const heapCellSize = 8
+
+func emitHeapAlloc(size int) {
+	allocSize := (size / heapCellSize) * heapCellSize
+	emitMov("%%ebp", "%%eax")
+	emit("\tsubl %%rsi, %%eax")
+	emit("\taddl $%d, %%ebp", allocSize*8)
+
+	//(emit "  mov~a %~a, %~a" (instr-suf) (bp) (ax))
+	//(emit "  sub~a %~a, %~a" (instr-suf) (rsi) (ax))
+	//(emit "  add~a $~a, %~a" (instr-suf) (* alloc-size 8) (bp))))
+}
+
+func emitStackSave(si int) {
+	emitMov(eax(0), rsp(si))
+}
+
 func emitOperand2(expr expression, si int, env *environment) {
 	emitExpr(primcallOperand2(expr), si, env)
-	emit("\tmovl %%eax, %d(%%rsp)", si)
+	//emit("\tmovl %%eax, %d(%%rsp)", si)
+	emitStackSave(si)
 	emitExpr(primcallOperand1(expr), si-wordSize, env)
+}
+
+func emitMov(a, b string) {
+	emit("\tmovl %s, %s", a, b)
+}
+
+func emitOrl(a, b string) {
+	emit("\torl %s, %s", a, b)
+}
+
+func emitAdd(a, b string) {
+	emit("\taddl %s, %s", a, b)
 }
 
 var primcallOpList = []string{
@@ -275,10 +323,12 @@ var primcallOpList = []string{
 	">",
 	">=",
 	"char=?",
+	"cons",
 }
 
 func emitPrimitiveCall(expr expression, si int, env *environment) {
-	switch primcallOp(expr).value {
+	op := primcallOp(expr).value
+	switch op {
 	case "add1":
 		emitExpr(primcallOperand1(expr), si, env)
 		emit("\taddl $%d, %%eax", fixnum1)
@@ -337,6 +387,37 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 	case "char=?":
 		emitOperand2(expr, si, env)
 		emitCompStack("sete", si)
+	case "car":
+		emitExpr(primcallOperand1(expr), si, env)
+		//emitMov(eax(-1), eax(0))
+		n, _ := immediateRep("10")
+		emitMov(num(n), eax(0))
+	case "cons":
+		emitOperand2(expr, si, env)
+		emitStackSave(si - wordSize)
+
+		hi := 0
+		a, _ := immediateRep("10")
+		b, _ := immediateRep("20")
+		emitMov(num(a), fmt.Sprintf("0(%s)", esi(hi)))
+		emitMov(num(b), esi(hi+wordSize))
+		emitMov(esi(hi), eax(0))
+		emitOrl(num(1), eax(0))
+		emitAdd(num(8), esi(0))
+
+		/*
+			emitOperand2(expr, si, env)
+			hi := 0
+			emitMov(eax(0), esi(hi+wordSize))
+			emitMov(rsp(si), eax(0))
+			emitMov(eax(0), fmt.Sprintf("0(%s)", esi(hi)))
+			emitMov(esi(hi), eax(0))
+			emitOrl(num(1), eax(0))
+			emitAdd(num(8), esi(0))
+		*/
+	default:
+		if isCarCdr(op) {
+		}
 	}
 }
 
@@ -573,13 +654,22 @@ func parse(x string) expression {
 	}
 }
 
-func compileProgram(x string) {
+func emitFunctionHeader(label string) {
 	emit("\t.text")
-	emit("\t.p2align 4,,15")
-	emit("\t.globl scheme_entry")
-	emit("\t.type scheme_entry, @function")
-	emit("scheme_entry:")
+	emit("\t.global %s", label)
+	emit("\t.type %s, @function", label)
+	emitLabel(label)
+}
+
+func compileProgram(x string) {
+	emitFunctionHeader("L_scheme_entry")
 	emitExpr(parse(x), stackIndexInit, newEnv())
+	emit("\tret")
+	emitFunctionHeader("scheme_entry")
+	emit("\tmovq %%rsp, %%rcx")
+	emit("\tmovq 8(%%rsp), %%rsp")
+	emit("\tcall L_scheme_entry")
+	emit("\tmovq %%rcx, %%rsp")
 	emit("\tret")
 }
 
