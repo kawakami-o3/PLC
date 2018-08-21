@@ -188,6 +188,15 @@ func isLet(e expression) bool {
 	return v == "let" || v == "let*"
 }
 
+func isLetrec(e expression) bool {
+	if len(e.list) == 0 {
+		return false
+	}
+
+	v := e.list[0].value
+	return v == "letrec"
+}
+
 func isCarCdr(op string) bool {
 	if len(op) >= 3 && op[0] == 'c' && op[len(op)-1] == 'r' {
 		for i := 1; i < len(op)-1; i++ {
@@ -488,6 +497,22 @@ func emitLet(bindings []expression, body expression, si int, env *environment) {
 	}
 }
 
+func emitLetrec(bindings []expression, body expression, si int, env *environment) {
+
+}
+
+func emitLambda(env *environment, expr expression, label string) {
+	emitFunctionHeader(label)
+	fmls := lambdaFormals(expr)
+	body := lambdaBody(expr)
+}
+
+func emitSchemeEntry(expr expression, env, *environment) {
+	emitFunctionHeader("L_scheme_entry")
+	emitExpr(-wordSize, env, expr)
+	emit("\tret")
+}
+
 var labelCount = 0
 
 func uniqueLabel() string {
@@ -541,6 +566,8 @@ func emitExpr(expr expression, si int, env *environment) {
 		emitIf(expr.list[1], expr.list[2], expr.list[3], si, env)
 	} else if isLet(expr) {
 		emitLet(bindings(expr), body(expr), si, env)
+	} else if isLetrec(expr) {
+		emitLetrec(bindings(expr), body(expr), si, env)
 	} else if isPrimcall(expr) {
 		emitPrimitiveCall(expr, si, env)
 	} else {
