@@ -507,7 +507,7 @@ func emitLambda(env *environment, expr expression, label string) {
 	body := lambdaBody(expr)
 }
 
-func emitSchemeEntry(expr expression, env, *environment) {
+func emitSchemeEntry(expr expression, env *environment) {
 	emitFunctionHeader("L_scheme_entry")
 	emitExpr(-wordSize, env, expr)
 	emit("\tret")
