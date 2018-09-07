@@ -440,6 +440,10 @@ func newEnv() *environment {
 	return env
 }
 
+func makeInitialEnv(lvars []expression, labels []string) *environment {
+	return nil
+}
+
 func (env *environment) lookup(x expression) (int, error) {
 	si, ok := env.variables[x.value]
 	if ok {
@@ -497,27 +501,84 @@ func emitLet(bindings []expression, body expression, si int, env *environment) {
 	}
 }
 
-func emitLetrec(bindings []expression, body expression, si int, env *environment) {
+func mapLhs(bindings []expression) []expression {
+	ret := []expression{}
+	for _, b := range bindings {
+		ret = append(ret, b.list[0])
+	}
+	return ret
+}
 
+func mapRhs(bindings []expression) []expression {
+	ret := []expression{}
+	for _, b := range bindings {
+		ret = append(ret, b.list[1])
+	}
+	return ret
+}
+
+func letrecBindings(expr expression) []expression {
+	return expr.list[1].list
+}
+func letrecBody(expr expression) expression {
+	return expr.list[2]
+}
+
+//func emitLetrec(bindings []expression, body expression, si int, env *environment) {
+//func emitLetrec(bindings []expression, body expression, si int) {
+func emitLetrec(expr expression) {
+	bindings := letrecBindings(expr)
+	lvars := mapLhs(bindings)
+	lambdas := mapRhs(bindings)
+	labels := uniqueLabels(lvars)
+	fmt.Println("------------------")
+	env := makeInitialEnv(lvars, labels)
+	for i := 0; i < len(lambdas); i++ {
+		emitLambda(env, lambdas[i], labels[i])
+	}
+
+	emitSchemeEntry(letrecBody(expr), env)
+	fmt.Println("------------------")
+}
+
+func lambdaFormals(expr expression) []expression {
+	return expr.list[1].list
+}
+
+func lambdaBody(expr expression) expression {
+	return expr.list[2]
 }
 
 func emitLambda(env *environment, expr expression, label string) {
 	emitFunctionHeader(label)
 	fmls := lambdaFormals(expr)
 	body := lambdaBody(expr)
+	fmt.Println("------------------")
+	fmt.Println(fmls)
+	fmt.Println(body)
 }
 
 func emitSchemeEntry(expr expression, env *environment) {
 	emitFunctionHeader("L_scheme_entry")
-	emitExpr(-wordSize, env, expr)
+	emitExpr(expr, -wordSize, env)
 	emit("\tret")
 }
 
 var labelCount = 0
 
 func uniqueLabel() string {
+	label := fmt.Sprintf("L_%d", labelCount)
 	labelCount++
-	return fmt.Sprintf("L%d", labelCount)
+	return label
+}
+
+func uniqueLabels(lvars []expression) []string {
+	ret := []string{}
+	for _, lvar := range lvars {
+		labelCount++
+		ret = append(ret, fmt.Sprintf("L_%s_%d", lvar.value, labelCount))
+	}
+	return ret
 }
 
 func emitJe(label string) {
@@ -567,7 +628,8 @@ func emitExpr(expr expression, si int, env *environment) {
 	} else if isLet(expr) {
 		emitLet(bindings(expr), body(expr), si, env)
 	} else if isLetrec(expr) {
-		emitLetrec(bindings(expr), body(expr), si, env)
+		//emitLetrec(bindings(expr), body(expr), si, env)
+		emitLetrec(expr)
 	} else if isPrimcall(expr) {
 		emitPrimitiveCall(expr, si, env)
 	} else {
@@ -689,15 +751,22 @@ func emitFunctionHeader(label string) {
 }
 
 func compileProgram(x string) {
-	emitFunctionHeader("L_scheme_entry")
-	emitExpr(parse(x), stackIndexInit, newEnv())
-	emit("\tret")
+	//emitFunctionHeader("L_scheme_entry")
+	//emitExpr(parse(x), stackIndexInit, newEnv())
+	//emit("\tret")
 	emitFunctionHeader("scheme_entry")
 	emit("\tmovq %%rsp, %%rcx")
 	emit("\tmovq 8(%%rsp), %%rsp")
 	emit("\tcall L_scheme_entry")
 	emit("\tmovq %%rcx, %%rsp")
 	emit("\tret")
+
+	program := parse(x)
+	if isLetrec(program) {
+		emitLetrec(program)
+	} else {
+		emitSchemeEntry(program, makeInitialEnv([]expression{}, []string{}))
+	}
 }
 
 func main() {
