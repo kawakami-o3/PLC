@@ -441,7 +441,7 @@ func newEnv() *environment {
 }
 
 func makeInitialEnv(lvars []expression, labels []string) *environment {
-	return nil
+	return newEnv()
 }
 
 func (env *environment) lookup(x expression) (int, error) {
@@ -531,14 +531,12 @@ func emitLetrec(expr expression) {
 	lvars := mapLhs(bindings)
 	lambdas := mapRhs(bindings)
 	labels := uniqueLabels(lvars)
-	fmt.Println("------------------")
 	env := makeInitialEnv(lvars, labels)
 	for i := 0; i < len(lambdas); i++ {
 		emitLambda(env, lambdas[i], labels[i])
 	}
 
 	emitSchemeEntry(letrecBody(expr), env)
-	fmt.Println("------------------")
 }
 
 func lambdaFormals(expr expression) []expression {
@@ -553,7 +551,6 @@ func emitLambda(env *environment, expr expression, label string) {
 	emitFunctionHeader(label)
 	fmls := lambdaFormals(expr)
 	body := lambdaBody(expr)
-	fmt.Println("------------------")
 	fmt.Println(fmls)
 	fmt.Println(body)
 }
@@ -675,7 +672,7 @@ func tokenize(x string) *tokenBuffer {
 				tokens = append(tokens, t)
 				t = ""
 			}
-		} else if c == ')' {
+		} else if c == ')' || c == ']' {
 			if len(t) == 0 {
 				// TODO quote
 				if tokens[len(tokens)-1] == "(" {
@@ -688,7 +685,7 @@ func tokenize(x string) *tokenBuffer {
 				t = ""
 				tokens = append(tokens, string(c))
 			}
-		} else if c == '(' || c == ')' {
+		} else if c == '(' || c == ')' || c == '[' || c == ']' {
 			if len(t) > 0 {
 				tokens = append(tokens, t)
 				t = ""
@@ -703,11 +700,19 @@ func tokenize(x string) *tokenBuffer {
 	return &tokenBuffer{tokens, -1}
 }
 
+func isBra(s string) bool {
+	return s == "(" || s == "["
+}
+
+func isKet(s string) bool {
+	return s == ")" || s == "]"
+}
+
 func makeExpr(tokens *tokenBuffer) expression {
 	t := tokens.get()
-	if t == "(" {
+	if isBra(t) {
 		ret := expression{}
-		for tokens.next() != ")" {
+		for false == isKet(tokens.next()) {
 			expr := makeExpr(tokens)
 			ret.list = append(ret.list, expr)
 		}
@@ -716,7 +721,7 @@ func makeExpr(tokens *tokenBuffer) expression {
 			ret.value = "()"
 		}
 		return ret
-	} else if t == ")" {
+	} else if isKet(t) {
 		panic("unexpected ')'")
 	} else {
 		ret := expression{}
