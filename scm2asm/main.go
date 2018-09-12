@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strconv"
 	"unicode"
+
+	"github.com/k0kubun/pp"
 )
 
 const (
@@ -142,6 +144,10 @@ func isInitial(c byte) bool {
 func isSubsequent(c byte) bool {
 	_, ok := specialSubsequent[c]
 	return isInitial(c) || unicode.IsDigit(rune(c)) || ok
+}
+
+func isEmpty(e expression) bool {
+	return e.value == tokenEmpty
 }
 
 func isVariable(e expression) bool {
@@ -441,6 +447,8 @@ func newEnv() *environment {
 }
 
 func makeInitialEnv(lvars []expression, labels []string) *environment {
+
+	// TODO
 	return newEnv()
 }
 
@@ -539,23 +547,44 @@ func emitLetrec(expr expression) {
 	emitSchemeEntry(letrecBody(expr), env)
 }
 
-func lambdaFormals(expr expression) []expression {
-	return expr.list[1].list
+//func lambdaFormals(expr expression) []expression {
+func lambdaFormals(expr expression) expression {
+	return expr.list[1]
 }
 
 func lambdaBody(expr expression) expression {
 	return expr.list[2]
 }
 
+func emitLambdaInternal(fmls, body expression, si int, env *environment) {
+	if isEmpty(fmls) {
+		emitExpr(body, si, env)
+		emit("\tret")
+	} else {
+		fmt.Println("=================")
+	}
+}
+
 func emitLambda(env *environment, expr expression, label string) {
 	emitFunctionHeader(label)
 	fmls := lambdaFormals(expr)
 	body := lambdaBody(expr)
-	fmt.Println(fmls)
-	fmt.Println(body)
+
+	/*
+		fmt.Println("============")
+		fmt.Println(expr.list)
+		fmt.Println(fmls)
+		fmt.Println(body)
+		fmt.Println("============")
+	*/
+
+	emitLambdaInternal(fmls, body, -wordSize, env)
+	//env.extend(lhs(b), si)
 }
 
 func emitSchemeEntry(expr expression, env *environment) {
+	pp.Println(expr)
+	pp.Println(env)
 	emitFunctionHeader("L_scheme_entry")
 	emitExpr(expr, -wordSize, env)
 	emit("\tret")

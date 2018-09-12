@@ -3,12 +3,11 @@ require "./bootstrap"
 
 run '(letrec () 12)', 12
 run '(letrec () (let ([x 5]) (+ x x)))', 10
-#run '(letrec ([f (lambda () 5)]) 7)', 7
+run '(letrec ([f (lambda () 5)]) 7)', 7
+run '(letrec ([f (lambda () 5)]) (let ([x 12]) x))', 12
+run '(letrec ([f (lambda () 5)]) (f))', 5
 
 __END__
-  [(letrec ([f (lambda () 5)]) 7) => "7\n"]
-  [(letrec ([f (lambda () 5)]) (let ([x 12]) x)) => "12\n"]
-  [(letrec ([f (lambda () 5)]) (f)) => "5\n"]
   [(letrec ([f (lambda () 5)]) (let ([x (f)]) x)) => "5\n"]
   [(letrec ([f (lambda () 5)]) (fx+ (f) 6)) => "11\n"]
   [(letrec ([f (lambda () 5)]) (fx+ 6 (f))) => "11\n"]
