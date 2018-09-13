@@ -438,18 +438,33 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 
 type environment struct {
 	variables map[string]int
+
+	labels map[string]string
 }
 
 func newEnv() *environment {
 	env := &environment{}
 	env.variables = map[string]int{}
+	env.labels = map[string]string{}
 	return env
 }
 
 func makeInitialEnv(lvars []expression, labels []string) *environment {
+	env := newEnv()
+	for i := 0; i < len(lvars); i++ {
+		//env.exps[labels[i]] = lvars[i]
+		env.labels[lvars[i].value] = labels[i]
+	}
+	return env
+}
 
-	// TODO
-	return newEnv()
+func (env *environment) lookupLabel(x expression) (string, error) {
+	label, ok := env.labels[x.value]
+	if ok {
+		return label, nil
+	} else {
+		return "", errors.New(fmt.Sprintf("variable not found: %s", x.value))
+	}
 }
 
 func (env *environment) lookup(x expression) (int, error) {
@@ -570,23 +585,15 @@ func emitLambda(env *environment, expr expression, label string) {
 	fmls := lambdaFormals(expr)
 	body := lambdaBody(expr)
 
-	/*
-		fmt.Println("============")
-		fmt.Println(expr.list)
-		fmt.Println(fmls)
-		fmt.Println(body)
-		fmt.Println("============")
-	*/
-
 	emitLambdaInternal(fmls, body, -wordSize, env)
-	//env.extend(lhs(b), si)
 }
 
 func emitSchemeEntry(expr expression, env *environment) {
-	pp.Println(expr)
-	pp.Println(env)
 	emitFunctionHeader("L_scheme_entry")
+	fmt.Println("-------")
+	pp.Println(expr)
 	emitExpr(expr, -wordSize, env)
+	fmt.Println("-------")
 	emit("\tret")
 }
 
@@ -636,6 +643,11 @@ func emitIf(test, conseq, altern expression, si int, env *environment) {
 	emitLabel(L1)
 }
 
+func isApp(expr expression, env *environment) bool {
+	_, ok := env.labels[expr.list[0].value]
+	return ok
+}
+
 func emitExpr(expr expression, si int, env *environment) {
 	if isImmediate(expr) {
 		n, err := immediateRep(expr.value)
@@ -644,11 +656,9 @@ func emitExpr(expr expression, si int, env *environment) {
 		}
 		emit("\tmovl $%d, %%eax", n)
 	} else if isVariable(expr) {
-		n, err := env.lookup(expr)
-		if err != nil {
-			panic(err)
+		if n, err := env.lookup(expr); err == nil {
+			emit("\tmovl %d(%%rsp), %%eax", n)
 		}
-		emit("\tmovl %d(%%rsp), %%eax", n)
 	} else if isIf(expr) {
 		emitIf(expr.list[1], expr.list[2], expr.list[3], si, env)
 	} else if isLet(expr) {
@@ -658,6 +668,8 @@ func emitExpr(expr expression, si int, env *environment) {
 		emitLetrec(expr)
 	} else if isPrimcall(expr) {
 		emitPrimitiveCall(expr, si, env)
+	} else if isApp(expr, env) {
+		panic("app")
 	} else {
 		//
 	}
@@ -782,6 +794,12 @@ func emitFunctionHeader(label string) {
 	emit("\t.global %s", label)
 	emit("\t.type %s, @function", label)
 	emitLabel(label)
+}
+
+func emitAdjustBase(si int) {
+	if si != 0 {
+		emit("\taddq $%d, %rsp", si) // FIXME addq? rsp?
+	}
 }
 
 func compileProgram(x string) {
