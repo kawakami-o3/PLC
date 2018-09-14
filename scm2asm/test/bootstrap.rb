@@ -3,7 +3,7 @@
 require "open3"
 
 def build
-	system "cd ../ && bash run.sh"
+	system "cd ../ && goimports -w -l . && go build -o scm2asm.exe"
 end
 
 def run v, result = nil
@@ -11,9 +11,9 @@ def run v, result = nil
 	result = result.to_s
 
 	if v.to_s[0] == '#' || v.to_s[0] == '('
-		system "../scm2asm.exe '#{v}' > scheme_entry.s"
+		system "../scm2asm.exe -- '#{v}' > scheme_entry.s"
 	else
-		system "../scm2asm.exe #{v} > scheme_entry.s"
+		system "../scm2asm.exe -- #{v} > scheme_entry.s"
 	end
 	system "gcc -o a.out scheme_entry.s main.c"
 	#a = `./a.out`
@@ -32,7 +32,10 @@ def run v, result = nil
 	#File.delete("scheme_entry.s")
 end
 
-build
+unless $done
+	build
+	$done
+end
 
 
 
