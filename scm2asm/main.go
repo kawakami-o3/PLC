@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strconv"
 	"unicode"
-
-	"github.com/k0kubun/pp"
 )
 
 const (
@@ -590,10 +588,7 @@ func emitLambda(env *environment, expr expression, label string) {
 
 func emitSchemeEntry(expr expression, env *environment) {
 	emitFunctionHeader("L_scheme_entry")
-	fmt.Println("-------")
-	pp.Println(expr)
 	emitExpr(expr, -wordSize, env)
-	fmt.Println("-------")
 	emit("\tret")
 }
 
@@ -648,6 +643,27 @@ func isApp(expr expression, env *environment) bool {
 	return ok
 }
 
+func emitArguments(args []expression, si int, env *environment) {
+	for _, e := range args {
+		emitExpr(e, si, env)
+		emitStackSave(si)
+		si -= wordSize
+	}
+}
+
+func emitApp(expr expression, si int, env *environment) {
+	callTarget := expr.list[0]
+
+	emitArguments(expr.list[1:], si-2*wordSize, env)
+	emitAdjustBase(si + wordSize)
+	label, err := env.lookupLabel(callTarget)
+	if err != nil {
+		panic(fmt.Sprintf("%s not found", callTarget.value))
+	}
+	emitCall(label)
+	emitAdjustBase(-1 * (si + wordSize))
+}
+
 func emitExpr(expr expression, si int, env *environment) {
 	if isImmediate(expr) {
 		n, err := immediateRep(expr.value)
@@ -669,7 +685,7 @@ func emitExpr(expr expression, si int, env *environment) {
 	} else if isPrimcall(expr) {
 		emitPrimitiveCall(expr, si, env)
 	} else if isApp(expr, env) {
-		panic("app")
+		emitApp(expr, si, env)
 	} else {
 		//
 	}
@@ -800,6 +816,10 @@ func emitAdjustBase(si int) {
 	if si != 0 {
 		emit("\taddq $%d, %rsp", si) // FIXME addq? rsp?
 	}
+}
+
+func emitCall(label string) {
+	emit("\tcall %s", label)
 }
 
 func compileProgram(x string) {

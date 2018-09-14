@@ -14,4 +14,5 @@ go build -o scm2asm.exe
 #./scm2asm.exe '(letrec () 12)'
 #./scm2asm.exe '(letrec () (let ([x 5]) (+ x x)))'
 #run '(letrec ([f (lambda () 5)]) 7)'
-run '(letrec ([f (lambda () 5)]) (f))'
+#run '(letrec ([f (lambda () 5)]) (f))'
+
