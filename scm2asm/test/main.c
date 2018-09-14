@@ -91,7 +91,9 @@ int main(int argc, char** argv) {
 	char* stack_top = allocate_protected_space(stack_size);
 	char* stack_base = stack_top + stack_size;
 
+	//printf("%d\n", stack_top);
 	print_ptr(scheme_entry(stack_base));
+	//printf("%d\n", stack_top);
 
 	deallocate_protected_space(stack_top, stack_size);
 	return 0;

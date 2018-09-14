@@ -570,12 +570,13 @@ func lambdaBody(expr expression) expression {
 }
 
 func emitLambdaInternal(fmls, body expression, si int, env *environment) {
-	if isEmpty(fmls) {
-		emitExpr(body, si, env)
-		emit("\tret")
-	} else {
-		fmt.Println("=================")
+	for _, e := range fmls.list {
+		env.extend(e, si)
+		si -= wordSize
 	}
+
+	emitExpr(body, si, env)
+	emit("\tret")
 }
 
 func emitLambda(env *environment, expr expression, label string) {
@@ -814,7 +815,7 @@ func emitFunctionHeader(label string) {
 
 func emitAdjustBase(si int) {
 	if si != 0 {
-		emit("\taddq $%d, %rsp", si) // FIXME addq? rsp?
+		emit("\taddq $%d, %%rsp", si)
 	}
 }
 
