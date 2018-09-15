@@ -23,8 +23,10 @@ def run v, result = nil
 	if o == result
 		puts "OK: #{v}"
 	else
-		printf("NG: result #{o.chomp} (%#b), expected #{result}\n", o.chomp.to_i)
+		printf("NG: #{v}\n")
+		printf("Result: #{o.chomp} (%#b), expected #{result}\n", o.chomp.to_i)
 		puts open("scheme_entry.s").read
+		exit
 	end
 	#p [o,e,s]
 
@@ -39,3 +41,9 @@ end
 
 
 
+def run_all name, tests
+	puts "Test: #{name}"
+	tests.each do |k,v|
+		run k,v
+	end
+end
