@@ -20,6 +20,10 @@ go build -o scm2asm.exe
 #run '(letrec ([f (lambda (x) (+ x 12))]) (f 13))'
 
 #run '(letrec ([f (lambda (x) (if (zero? x) 0 (+ 1 (f (sub1 x)))))]) (f 200))'
-run '(letrec ([sum (lambda (n ac) (if (zero? n) ac (sum (sub1 n) (+ n ac))))]) (sum 10 0))'
+run '(letrec ([sum (lambda (n ac) (if (zero? n) ac (app sum (sub1 n) (+ n ac))))]) (sum 10 0))'
 
+#run '(letrec ([e (lambda (x) (if (zero? x) #t (o (sub1 x))))]
+#            [o (lambda (x) (if (zero? x) #f (e (sub1 x))))])
+#     (e 25))'
+ 
 

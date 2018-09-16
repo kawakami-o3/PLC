@@ -545,8 +545,6 @@ func letrecBody(expr expression) expression {
 	return expr.list[2]
 }
 
-//func emitLetrec(bindings []expression, body expression, si int, env *environment) {
-//func emitLetrec(bindings []expression, body expression, si int) {
 func emitLetrec(expr expression) {
 	bindings := letrecBindings(expr)
 	lvars := mapLhs(bindings)
@@ -560,7 +558,6 @@ func emitLetrec(expr expression) {
 	emitSchemeEntry(letrecBody(expr), env)
 }
 
-//func lambdaFormals(expr expression) []expression {
 func lambdaFormals(expr expression) expression {
 	return expr.list[1]
 }
@@ -688,7 +685,7 @@ func emitExpr(expr expression, si int, env *environment) {
 	} else if isApp(expr, env) {
 		emitApp(expr, si, env)
 	} else {
-		//
+		panic("[emitExpr] not implemented.")
 	}
 }
 

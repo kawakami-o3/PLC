@@ -26,9 +26,9 @@ def run v, result = nil
 		printf("NG: #{v}\n")
 		printf("Result: #{o.chomp} (%#b), expected #{result}\n", o.chomp.to_i)
 		puts open("scheme_entry.s").read
+		p [o,e,s]
 		exit
 	end
-	#p [o,e,s]
 
 	#File.delete("a.out")
 	#File.delete("scheme_entry.s")
