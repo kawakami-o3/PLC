@@ -566,7 +566,12 @@ func lambdaBody(expr expression) expression {
 	return expr.list[2]
 }
 
-func emitLambdaInternal(fmls, body expression, si int, env *environment) {
+func emitLambda(env *environment, expr expression, label string) {
+	emitFunctionHeader(label)
+	fmls := lambdaFormals(expr)
+	body := lambdaBody(expr)
+	si := -wordSize
+
 	for _, e := range fmls.list {
 		env.extend(e, si)
 		si -= wordSize
@@ -574,14 +579,6 @@ func emitLambdaInternal(fmls, body expression, si int, env *environment) {
 
 	emitExpr(body, si, env)
 	emit("\tret")
-}
-
-func emitLambda(env *environment, expr expression, label string) {
-	emitFunctionHeader(label)
-	fmls := lambdaFormals(expr)
-	body := lambdaBody(expr)
-
-	emitLambdaInternal(fmls, body, -wordSize, env)
 }
 
 func emitSchemeEntry(expr expression, env *environment) {
