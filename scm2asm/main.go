@@ -294,6 +294,10 @@ func emitHeapAlloc(size int) {
 	//(emit "  add~a $~a, %~a" (instr-suf) (* alloc-size 8) (bp))))
 }
 
+func emitStackLoad(si int) {
+	emitMov(rsp(si), eax(0))
+}
+
 func emitStackSave(si int) {
 	emitMov(eax(0), rsp(si))
 }
@@ -510,16 +514,16 @@ func body(e expression) expression {
 	}
 }
 
-func emitLet(bindings []expression, body expression, si int, env *environment) {
-	if len(bindings) == 0 {
-		emitExpr(body, si, env)
-	} else {
-		b := bindings[0]
+func emitLet(bindings []expression, body expression, si int, env *environment, isTail bool) {
+	for _, b := range bindings {
 		emitExpr(rhs(b), si, env)
 		emit("\tmovl %%eax, %d(%%rsp)", si)
 		env.extend(lhs(b), si)
-		emitLet(bindings[1:], body, si-wordSize, env)
+
+		si -= wordSize
 	}
+
+	emitAnyExpr(body, si, env, isTail)
 }
 
 func mapLhs(bindings []expression) []expression {
@@ -583,8 +587,7 @@ func emitLambda(env *environment, expr expression, label string) {
 
 func emitSchemeEntry(expr expression, env *environment) {
 	emitFunctionHeader("L_scheme_entry")
-	emitExpr(expr, -wordSize, env)
-	emit("\tret")
+	emitTailExpr(expr, -wordSize, env)
 }
 
 var labelCount = 0
@@ -595,6 +598,7 @@ func uniqueLabel() string {
 	return label
 }
 
+// TODO need the migration?
 func uniqueLabels(lvars []expression) []string {
 	ret := []string{}
 	for _, lvar := range lvars {
@@ -620,17 +624,25 @@ func emitCmpl(a, b string) {
 	emit("\tcmpl %s, %s", a, b)
 }
 
-func emitIf(test, conseq, altern expression, si int, env *environment) {
-	L0 := uniqueLabel()
-	L1 := uniqueLabel()
+func emitRetIf(isTail bool) {
+	if isTail {
+		emit("\tret")
+	}
+}
+
+func emitIf(test, conseq, altern expression, si int, env *environment, isTail bool) {
+	altLabel := uniqueLabel()
+	endLabel := uniqueLabel()
 	emitExpr(test, si, env)
 	emitCmpl(num(boolFalse), eax(0))
-	emitJe(L0)
-	emitExpr(conseq, si, env)
-	emitJmp(L1)
-	emitLabel(L0)
-	emitExpr(altern, si, env)
-	emitLabel(L1)
+	emitJe(altLabel)
+	emitAnyExpr(conseq, si, env, isTail)
+	if !isTail {
+		emitJmp(endLabel)
+	}
+	emitLabel(altLabel)
+	emitAnyExpr(altern, si, env, isTail)
+	emitLabel(endLabel)
 }
 
 func isApp(expr expression, env *environment) bool {
@@ -646,41 +658,76 @@ func emitArguments(args []expression, si int, env *environment) {
 	}
 }
 
-func emitApp(expr expression, si int, env *environment) {
-	callTarget := expr.list[0]
-
-	emitArguments(expr.list[1:], si-2*wordSize, env)
-	emitAdjustBase(si + wordSize)
-	label, err := env.lookupLabel(callTarget)
-	if err != nil {
-		panic(fmt.Sprintf("%s not found", callTarget.value))
+func moveArguments(args []expression, si, delta int, env *environment) {
+	if delta == 0 {
+		return
 	}
-	emitCall(label)
-	emitAdjustBase(-1 * (si + wordSize))
+
+	for _, e := range args {
+		emitExpr(e, si, env)
+		emitStackSave(si)
+		si -= wordSize
+	}
+}
+
+func emitApp(expr expression, si int, env *environment, isTail bool) {
+	callTarget := expr.list[0]
+	callArgs := expr.list[1:]
+	if isTail {
+		emitArguments(callArgs, si, env)
+		moveArguments(callArgs, si, -(si + wordSize), env)
+
+		label, err := env.lookupLabel(callTarget)
+		if err != nil {
+			panic(fmt.Sprintf("%s not found", callTarget.value))
+		}
+		emitJmp(label)
+	} else {
+		emitArguments(callArgs, si-2*wordSize, env)
+		emitAdjustBase(si + wordSize)
+		label, err := env.lookupLabel(callTarget)
+		if err != nil {
+			panic(fmt.Sprintf("%s not found", callTarget.value))
+		}
+		emitCall(label)
+		emitAdjustBase(-1 * (si + wordSize))
+	}
 }
 
 func emitExpr(expr expression, si int, env *environment) {
+	emitAnyExpr(expr, si, env, false)
+}
+
+func emitTailExpr(expr expression, si int, env *environment) {
+	emitAnyExpr(expr, si, env, true)
+}
+
+func emitAnyExpr(expr expression, si int, env *environment, isTail bool) {
 	if isImmediate(expr) {
 		n, err := immediateRep(expr.value)
 		if err != nil {
 			panic(err)
 		}
 		emit("\tmovl $%d, %%eax", n)
+		emitRetIf(isTail)
 	} else if isVariable(expr) {
 		if n, err := env.lookup(expr); err == nil {
-			emit("\tmovl %d(%%rsp), %%eax", n)
+			//emit("\tmovl %d(%%rsp), %%eax", n)
+			emitStackLoad(n)
 		}
+		emitRetIf(isTail)
 	} else if isIf(expr) {
-		emitIf(expr.list[1], expr.list[2], expr.list[3], si, env)
+		emitIf(expr.list[1], expr.list[2], expr.list[3], si, env, isTail)
 	} else if isLet(expr) {
-		emitLet(bindings(expr), body(expr), si, env)
+		emitLet(bindings(expr), body(expr), si, env, isTail)
 	} else if isLetrec(expr) {
 		//emitLetrec(bindings(expr), body(expr), si, env)
 		emitLetrec(expr)
 	} else if isPrimcall(expr) {
 		emitPrimitiveCall(expr, si, env)
+		emitRetIf(isTail)
 	} else if isApp(expr, env) {
-		emitApp(expr, si, env)
+		emitApp(expr, si, env, isTail)
 	} else {
 		panic("[emitExpr] not implemented.")
 	}
