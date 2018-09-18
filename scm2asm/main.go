@@ -385,7 +385,7 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 	case "*":
 		emitOperand2(expr, si, env)
 		emit("\timull %d(%%rsp), %%eax", si)
-		emit("sarl $%d, %%eax", fixnumShift)
+		emit("\tsarl $%d, %%eax", fixnumShift)
 	case "=":
 		emitOperand2(expr, si, env)
 		emitCompStack("sete", si)
@@ -581,8 +581,7 @@ func emitLambda(env *environment, expr expression, label string) {
 		si -= wordSize
 	}
 
-	emitExpr(body, si, env)
-	emit("\tret")
+	emitTailExpr(body, si, env)
 }
 
 func emitSchemeEntry(expr expression, env *environment) {
@@ -663,9 +662,9 @@ func moveArguments(args []expression, si, delta int, env *environment) {
 		return
 	}
 
-	for _, e := range args {
-		emitExpr(e, si, env)
-		emitStackSave(si)
+	for i := 0; i < len(args); i++ {
+		emitStackLoad(si)
+		emitStackSave(si + delta)
 		si -= wordSize
 	}
 }
@@ -703,7 +702,9 @@ func emitTailExpr(expr expression, si int, env *environment) {
 }
 
 func emitAnyExpr(expr expression, si int, env *environment, isTail bool) {
+	log := ""
 	if isImmediate(expr) {
+		log += "immediate"
 		n, err := immediateRep(expr.value)
 		if err != nil {
 			panic(err)
@@ -711,26 +712,34 @@ func emitAnyExpr(expr expression, si int, env *environment, isTail bool) {
 		emit("\tmovl $%d, %%eax", n)
 		emitRetIf(isTail)
 	} else if isVariable(expr) {
+		log += "variable"
 		if n, err := env.lookup(expr); err == nil {
 			//emit("\tmovl %d(%%rsp), %%eax", n)
 			emitStackLoad(n)
 		}
 		emitRetIf(isTail)
 	} else if isIf(expr) {
+		log += "if"
 		emitIf(expr.list[1], expr.list[2], expr.list[3], si, env, isTail)
 	} else if isLet(expr) {
+		log += "let"
 		emitLet(bindings(expr), body(expr), si, env, isTail)
 	} else if isLetrec(expr) {
+		log += "letrec"
 		//emitLetrec(bindings(expr), body(expr), si, env)
 		emitLetrec(expr)
 	} else if isPrimcall(expr) {
+		log += "primcall"
 		emitPrimitiveCall(expr, si, env)
 		emitRetIf(isTail)
 	} else if isApp(expr, env) {
+		log += "app"
 		emitApp(expr, si, env, isTail)
 	} else {
 		panic("[emitExpr] not implemented.")
 	}
+
+	//fmt.Println("[debug]", log)
 }
 
 type expression struct {
