@@ -877,12 +877,50 @@ func compileProgram(x string) {
 	//emitFunctionHeader("L_scheme_entry")
 	//emitExpr(parse(x), stackIndexInit, newEnv())
 	//emit("\tret")
+
 	emitFunctionHeader("scheme_entry")
-	emit("\tmovq %%rsp, %%rcx")
-	emit("\tmovq 8(%%rsp), %%rsp")
+
+	emit("\tmov %%rdi, %%rcx")
+	emit("\tmov %%rbx, 4(%%rcx)")
+	emit("\tmov %%rsi, 16(%%rcx)")
+	emit("\tmov %%rdi, 20(%%rcx)")
+	emit("\tmov %%rbp, 24(%%rcx)")
+	emit("\tmov %%rsp, 28(%%rcx)")
+	emit("\tmov %%rdx, %%rbp")
+	emit("\tmov %%rsi, %%rsp")
 	emit("\tcall L_scheme_entry")
-	emit("\tmovq %%rcx, %%rsp")
+	emit("\tmov 4(%%rcx), %%rbx")
+	emit("\tmov 16(%%rcx), %%rsi")
+	emit("\tmov 20(%%rcx), %%rdi")
+	emit("\tmov 24(%%rcx), %%rbp")
+	emit("\tmov 28(%%rcx), %%rsp")
 	emit("\tret")
+
+	/*
+				emit("\tmovq 4(%%rsp), %%rcx")
+				emit("\tmovq %%rbx, 4(%%rcx)")
+				emit("\tmovq %%rsi, 16(%%rcx)")
+				emit("\tmovq %%rdi, 20(%%rcx)")
+				emit("\tmovq %%rbp, 24(%%rcx)")
+				emit("\tmovq %%rsp, 28(%%rcx)")
+				emit("\tmovq 12(%%rsp), %%rbp")
+				emit("\tmovq 8(%%rsp), %%rsp")
+				emit("\tcall L_scheme_entry")
+				emit("\tmovq 4(%%rcx), %%rbx")
+				emit("\tmovq 16(%%rcx), %%rsi")
+				emit("\tmovq 20(%%rcx), %%rdi")
+				emit("\tmovq 24(%%rcx), %%rbp")
+				emit("\tmovq 28(%%rcx), %%rsp")
+		        emit("\tret")
+	*/
+
+	/*
+		emit("\tmovq %%rsp, %%rcx")
+		emit("\tmovq 8(%%rsp), %%rsp")
+		emit("\tcall L_scheme_entry")
+		emit("\tmovq %%rcx, %%rsp")
+		emit("\tret")
+	*/
 
 	program := parse(x)
 	if isLetrec(program) {
