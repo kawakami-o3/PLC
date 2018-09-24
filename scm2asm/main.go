@@ -9,29 +9,44 @@ import (
 )
 
 const (
-	byteSize = 8
+	//byteSize = 8
 
-	fixnumBits  = wordSize*byteSize - fixnumShift
+	//fixnumBits  = wordSize*byteSize - fixnumShift
+	fixnumBits  = 32 - fixnumShift
 	fixnumLower = -(1 << fixnumBits)
 	fixnumUpper = 1<<fixnumBits - 1
 	fixnumShift = 2
 	fixnumTag   = 0x00
 	fixnum1     = 1 << fixnumShift
 
-	charShift = 8
-	charTag   = 0x0F
 	boolShift = 7
 	boolTag   = 0x1F
 	boolTrue  = 1<<boolShift + boolTag
 	boolFalse = 0<<boolShift + boolTag
+
 	emptyList = 0x2F
 
-	wordSize       = 4
+	charShift = 8
+	charTag   = 0x0F
+
+	objShift  = 3
+	objMask   = 0x07
+	pairTag   = 0x01
+	pairSize  = 16
+	pairCar   = 0
+	pairCdr   = 8
+	vectorTag = 0x05
+	stringTag = 0x06
+
+	wordSize       = 8
 	stackIndexInit = -wordSize
 
 	tokenTrue  = "#t"
 	tokenFalse = "#f"
 	tokenEmpty = "()"
+
+	sete = "sete"
+	setx = "setx"
 )
 
 func immediateRep(x string) (int, error) {
@@ -123,8 +138,7 @@ var (
 		"let*":             0,
 		"letrec":           0,
 		"do":               0,
-		"delay":            0,
-		"quasiquote":       0,
+		"delay":            0, "quasiquote": 0,
 	}
 
 	peculiarIdentifier = map[string]int{
@@ -258,7 +272,7 @@ func rsp(index int) string {
 
 func esi(index int) string {
 	//return fmt.Sprintf("%d(%%esi)", index)
-	return addr("%%esi", index)
+	return addr("%esi", index)
 }
 
 func num(i int) string {
@@ -302,6 +316,22 @@ func emitStackSave(si int) {
 	emitMov(eax(0), rsp(si))
 }
 
+func emitCmpBool(cmp string) {
+	// cmp: sete, setx ,,,
+	emit("\t%s %%al", cmp)
+	emit("\tmovzbq %%al, %%rax")
+	emit("\tsal $%d, %%al", boolTag)
+	emit("\tor $%d, %%al", boolFalse)
+}
+
+func emitIsObject(expr expression, si int, env *environment, tag int) {
+	//pp.Println(expr)
+	emitExpr(expr, si, env)
+	emit("\tand $%d, %%al", objMask)
+	emit("\tcmp $%d, %%al", tag)
+	emitCmpBool(sete)
+}
+
 func emitOperand2(expr expression, si int, env *environment) {
 	emitExpr(primcallOperand2(expr), si, env)
 	//emit("\tmovl %%eax, %d(%%rsp)", si)
@@ -341,6 +371,11 @@ var primcallOpList = []string{
 	">=",
 	"char=?",
 	"cons",
+	"pair?",
+}
+
+func nextStackIndex(si int) int {
+	return si - wordSize
 }
 
 func emitPrimitiveCall(expr expression, si int, env *environment) {
@@ -411,7 +446,7 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 		emitMov(num(n), eax(0))
 	case "cons":
 		emitOperand2(expr, si, env)
-		emitStackSave(si - wordSize)
+		emitStackSave(nextStackIndex(si)
 
 		hi := 0
 		a, _ := immediateRep("10")
@@ -432,6 +467,8 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 			emitOrl(num(1), eax(0))
 			emitAdd(num(8), esi(0))
 		*/
+	case "pair?":
+		emitIsObject(expr.list[1], si, env, pairTag)
 	default:
 		if isCarCdr(op) {
 		}
@@ -881,46 +918,20 @@ func compileProgram(x string) {
 	emitFunctionHeader("scheme_entry")
 
 	emit("\tmov %%rdi, %%rcx")
-	emit("\tmov %%rbx, 4(%%rcx)")
-	emit("\tmov %%rsi, 16(%%rcx)")
-	emit("\tmov %%rdi, 20(%%rcx)")
-	emit("\tmov %%rbp, 24(%%rcx)")
-	emit("\tmov %%rsp, 28(%%rcx)")
+	emit("\tmov %%rbx, 8(%%rcx)")
+	emit("\tmov %%rsi, 32(%%rcx)")
+	emit("\tmov %%rdi, 40(%%rcx)")
+	emit("\tmov %%rbp, 48(%%rcx)")
+	emit("\tmov %%rsp, 56(%%rcx)")
 	emit("\tmov %%rdx, %%rbp")
 	emit("\tmov %%rsi, %%rsp")
 	emit("\tcall L_scheme_entry")
-	emit("\tmov 4(%%rcx), %%rbx")
-	emit("\tmov 16(%%rcx), %%rsi")
-	emit("\tmov 20(%%rcx), %%rdi")
-	emit("\tmov 24(%%rcx), %%rbp")
-	emit("\tmov 28(%%rcx), %%rsp")
+	emit("\tmov 8(%%rcx), %%rbx")
+	emit("\tmov 32(%%rcx), %%rsi")
+	emit("\tmov 40(%%rcx), %%rdi")
+	emit("\tmov 48(%%rcx), %%rbp")
+	emit("\tmov 56(%%rcx), %%rsp")
 	emit("\tret")
-
-	/*
-				emit("\tmovq 4(%%rsp), %%rcx")
-				emit("\tmovq %%rbx, 4(%%rcx)")
-				emit("\tmovq %%rsi, 16(%%rcx)")
-				emit("\tmovq %%rdi, 20(%%rcx)")
-				emit("\tmovq %%rbp, 24(%%rcx)")
-				emit("\tmovq %%rsp, 28(%%rcx)")
-				emit("\tmovq 12(%%rsp), %%rbp")
-				emit("\tmovq 8(%%rsp), %%rsp")
-				emit("\tcall L_scheme_entry")
-				emit("\tmovq 4(%%rcx), %%rbx")
-				emit("\tmovq 16(%%rcx), %%rsi")
-				emit("\tmovq 20(%%rcx), %%rdi")
-				emit("\tmovq 24(%%rcx), %%rbp")
-				emit("\tmovq 28(%%rcx), %%rsp")
-		        emit("\tret")
-	*/
-
-	/*
-		emit("\tmovq %%rsp, %%rcx")
-		emit("\tmovq 8(%%rsp), %%rsp")
-		emit("\tcall L_scheme_entry")
-		emit("\tmovq %%rcx, %%rsp")
-		emit("\tret")
-	*/
 
 	program := parse(x)
 	if isLetrec(program) {

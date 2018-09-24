@@ -13,6 +13,7 @@ go build -o scm2asm.exe
 #./scm2asm.exe '(let ((a 1)) a)'
 #./scm2asm.exe '(letrec () 12)'
 #./scm2asm.exe '(letrec () (let ([x 5]) (+ x x)))'
+run '0'
 #run '(letrec ([f (lambda () 5)]) 7)'
 #run '(letrec ([f (lambda () 5)]) (f))'
 #run '(letrec ([f (lambda () (+ 5 7))] [g (lambda () 13)]) (+ (f) (g)))'
@@ -34,10 +35,10 @@ go build -o scm2asm.exe
 #                     (f (sub1 x) (* acc x))))])
 #      (f 5 1))'
 
-run '(letrec ([f (lambda (x)
-                 (if (zero? x)
-                     0
-                     (+ 1 (f (sub1 x)))))])
-			(f 200))'
-
+#run '(letrec ([f (lambda (x)
+#                 (if (zero? x)
+#                     0
+#                     (+ 1 (f (sub1 x)))))])
+#			(f 200))'
+#
 

@@ -17,7 +17,7 @@ run_all "deeply nested procedures", {
     (sum 10000 0))' => "50005000",
   '(letrec ([e (lambda (x) (if (zero? x) #t (o (sub1 x))))]
             [o (lambda (x) (if (zero? x) #f (e (sub1 x))))])
-     (e 5000000))' => "#t\n"
+     (e 5000000))' => "#t"
 }
 
 
