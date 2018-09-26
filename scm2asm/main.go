@@ -9,6 +9,7 @@ import (
 )
 
 const (
+	bytes = 4
 	//byteSize = 8
 
 	//fixnumBits  = wordSize*byteSize - fixnumShift
@@ -47,6 +48,8 @@ const (
 
 	sete = "sete"
 	setx = "setx"
+
+	heapCellSize = 8
 )
 
 func immediateRep(x string) (int, error) {
@@ -295,17 +298,10 @@ func emitCompStack(op string, si int) {
 	emit("\torl $%d, %%eax", boolTag)
 }
 
-const heapCellSize = 8
-
 func emitHeapAlloc(size int) {
-	allocSize := (size / heapCellSize) * heapCellSize
-	emitMov("%%ebp", "%%eax")
-	emit("\tsubl %%rsi, %%eax")
-	emit("\taddl $%d, %%ebp", allocSize*8)
-
-	//(emit "  mov~a %~a, %~a" (instr-suf) (bp) (ax))
-	//(emit "  sub~a %~a, %~a" (instr-suf) (rsi) (ax))
-	//(emit "  add~a $~a, %~a" (instr-suf) (* alloc-size 8) (bp))))
+	allocSize := (((size - 1) / heapCellSize) + 1) * heapCellSize
+	emit("\tmov %%rbp, %%rax")
+	emit("\tadd $%d, %%rbp", allocSize*bytes)
 }
 
 func emitStackLoad(si int) {
@@ -313,19 +309,24 @@ func emitStackLoad(si int) {
 }
 
 func emitStackSave(si int) {
-	emitMov(eax(0), rsp(si))
+	//emitMov(eax(0), rsp(si))
+	emit("\tmov %%rax, %d(%%rsp)", si)
+}
+
+func emitStackToHeap(si, offset int) {
+	emit("\tmov %d(%%rsp), %%rdx", si)
+	emit("\tmov %%rdx, %d(%%rax)", offset)
 }
 
 func emitCmpBool(cmp string) {
 	// cmp: sete, setx ,,,
 	emit("\t%s %%al", cmp)
 	emit("\tmovzbq %%al, %%rax")
-	emit("\tsal $%d, %%al", boolTag)
+	emit("\tsal $%d, %%al", boolShift)
 	emit("\tor $%d, %%al", boolFalse)
 }
 
 func emitIsObject(expr expression, si int, env *environment, tag int) {
-	//pp.Println(expr)
 	emitExpr(expr, si, env)
 	emit("\tand $%d, %%al", objMask)
 	emit("\tcmp $%d, %%al", tag)
@@ -333,10 +334,9 @@ func emitIsObject(expr expression, si int, env *environment, tag int) {
 }
 
 func emitOperand2(expr expression, si int, env *environment) {
-	emitExpr(primcallOperand2(expr), si, env)
-	//emit("\tmovl %%eax, %d(%%rsp)", si)
-	emitStackSave(si)
 	emitExpr(primcallOperand1(expr), si-wordSize, env)
+	emitStackSave(si)
+	emitExpr(primcallOperand2(expr), si, env)
 }
 
 func emitMov(a, b string) {
@@ -446,27 +446,11 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 		emitMov(num(n), eax(0))
 	case "cons":
 		emitOperand2(expr, si, env)
-		emitStackSave(nextStackIndex(si)
-
-		hi := 0
-		a, _ := immediateRep("10")
-		b, _ := immediateRep("20")
-		emitMov(num(a), fmt.Sprintf("0(%s)", esi(hi)))
-		emitMov(num(b), esi(hi+wordSize))
-		emitMov(esi(hi), eax(0))
-		emitOrl(num(1), eax(0))
-		emitAdd(num(8), esi(0))
-
-		/*
-			emitOperand2(expr, si, env)
-			hi := 0
-			emitMov(eax(0), esi(hi+wordSize))
-			emitMov(rsp(si), eax(0))
-			emitMov(eax(0), fmt.Sprintf("0(%s)", esi(hi)))
-			emitMov(esi(hi), eax(0))
-			emitOrl(num(1), eax(0))
-			emitAdd(num(8), esi(0))
-		*/
+		emitStackSave(nextStackIndex(si))
+		emitHeapAlloc(pairSize)
+		emit("\tor $%d, %%rax", pairTag)
+		emitStackToHeap(si, pairCar-pairTag)
+		emitStackToHeap(nextStackIndex(si), pairCdr-pairTag)
 	case "pair?":
 		emitIsObject(expr.list[1], si, env, pairTag)
 	default:
@@ -746,12 +730,11 @@ func emitAnyExpr(expr expression, si int, env *environment, isTail bool) {
 		if err != nil {
 			panic(err)
 		}
-		emit("\tmovl $%d, %%eax", n)
+		emit("\tmov $%d, %%rax", n)
 		emitRetIf(isTail)
 	} else if isVariable(expr) {
 		log += "variable"
 		if n, err := env.lookup(expr); err == nil {
-			//emit("\tmovl %d(%%rsp), %%eax", n)
 			emitStackLoad(n)
 		}
 		emitRetIf(isTail)
