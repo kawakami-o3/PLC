@@ -370,8 +370,12 @@ var primcallOpList = []string{
 	">",
 	">=",
 	"char=?",
+
 	"cons",
 	"pair?",
+
+	"make-vector",
+	"vector?",
 }
 
 func nextStackIndex(si int) int {
@@ -453,6 +457,15 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 		emitStackToHeap(nextStackIndex(si), pairCdr-pairTag)
 	case "pair?":
 		emitIsObject(expr.list[1], si, env, pairTag)
+
+	case "make-vector":
+		emitExpr(primcallOperand1(expr), si, env)
+		emitStackSave(si)
+
+		emit("\tandl $%d, %%eax", 1<<boolShift-1)
+		emitEq(boolTag)
+	case "vector?":
+		emitIsObject(expr.list[1], si, env, vectorTag)
 	default:
 		if isCarCdr(op) {
 		}
@@ -756,7 +769,7 @@ func emitAnyExpr(expr expression, si int, env *environment, isTail bool) {
 		log += "app"
 		emitApp(expr, si, env, isTail)
 	} else {
-		panic("[emitExpr] not implemented.")
+		panic(fmt.Sprintf("[emitAnyExpr] not implemented. %v", expr))
 	}
 
 	//fmt.Println("[debug]", log)
