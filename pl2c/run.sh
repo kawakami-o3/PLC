@@ -34,20 +34,7 @@ TARGET=lambda_3.lisp
 make clean
 make
 
-rm -f __test.c
-#go build -o __pl2c.exe && ./__pl2c.exe > __test.c && cat __test.c
+go build -o pl2c.exe && ./pl2c.exe ./test/$TARGET
+#go build -o pl2c.exe && ./pl2c.exe -S -o ./test.c ./test/$TARGET
 
-#go build -o __pl2c.exe && ./__pl2c.exe ../test/add_0.lisp > __test.c && cat __test.c
-#go build -o __pl2c.exe && ./__pl2c.exe ../test/$TARGET > __test.c && cat __test.c
-go build -o __pl2c.exe && ./__pl2c.exe ../test/$TARGET
-#go build -o __pl2c.exe && ./__pl2c.exe -S -o ./test.c ../test/$TARGET
-#go build -o __pl2c.exe && ./__pl2c.exe -S ../test/$TARGET
-
-#go build -o __pl2c.exe && ./__pl2c.exe
-#go build -o __pl2c.exe
-#./purelisp.exe > test.ll
-#clang test.ll
-
-
-#gcc __test.c -o __a.exe && ./__a.exe
 
