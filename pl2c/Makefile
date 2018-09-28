@@ -3,13 +3,12 @@
 #GOCMD=go
 #GOBUILD=$(GOCMD) build
 #GOCLEAN=$(GOCMD) build
-ASSETS=assets.go
 
 all: build
 
 build:
 	goimports -w -l .
-	goblet templates > $(ASSETS)
+	statik -src templates -m -f
 	go build
 
 test: build
@@ -17,8 +16,8 @@ test: build
 
 clean:
 	go clean
-	rm -f $(ASSETS)
+	rm -rf statik
 
 deps:
-	go get github.com/deadcheat/goblet
+	go get github.com/rakyll/statik
 

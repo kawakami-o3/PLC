@@ -11,6 +11,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/rakyll/statik/fs"
+
+	_ "./statik"
 )
 
 func readFile(filename string) string {
@@ -376,14 +380,31 @@ func (this *environment) registExternal(name string) {
 	this.external = append(this.external, name)
 }
 
+func loadTemplate(path string) (string, error) {
+	statikFS, err := fs.New()
+	if err != nil {
+		return "", err
+	}
+
+	file, err := statikFS.Open(path)
+	if err != nil {
+		return "", err
+	}
+
+	body, err := ioutil.ReadAll(file)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
+
 func (this *environment) toClang() string {
 	code := ""
 	for h, _ := range this.header {
 		code += fmt.Sprintf("#include<%s>\n", h)
 	}
 
-	common, _ := Assets.File("/templates/common.c")
-	commonBody, _ := ioutil.ReadAll(common)
+	commonBody, _ := loadTemplate("/common.c")
 	code += fmt.Sprintln(string(commonBody))
 
 	code += fmt.Sprintln(this.pre)
