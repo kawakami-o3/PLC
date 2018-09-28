@@ -14,7 +14,7 @@ import (
 
 	"github.com/rakyll/statik/fs"
 
-	_ "./statik"
+	_ "github.com/kawakami-o3/PLC/pl2c/statik"
 )
 
 func readFile(filename string) string {
