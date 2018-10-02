@@ -13,7 +13,7 @@ go build -o scm2asm.exe
 #./scm2asm.exe '(let ((a 1)) a)'
 #./scm2asm.exe '(letrec () 12)'
 #./scm2asm.exe '(letrec () (let ([x 5]) (+ x x)))'
-run '0'
+#run '0'
 #run '(letrec ([f (lambda () 5)]) 7)'
 #run '(letrec ([f (lambda () 5)]) (f))'
 #run '(letrec ([f (lambda () (+ 5 7))] [g (lambda () 13)]) (+ (f) (g)))'
@@ -41,4 +41,12 @@ run '0'
 #                     (+ 1 (f (sub1 x)))))])
 #			(f 200))'
 #
+
+#run '(car (car (cons (cons 12 3) (cons #t #f))))'
+#run '(let ([t0 (cons 1 2)] [t1 (cons 3 4)])
+#     (let ([a0 (car t0)] [a1 (car t1)] [d0 (cdr t0)] [d1 (cdr t1)])
+#       (let ([t0 (cons a0 d1)] [t1 (cons a1 d0)])
+#         (cons t0 t1))))'
+#run '(integer? (cons 12 43))'
+run '(boolean? (cons 12 43))'
 

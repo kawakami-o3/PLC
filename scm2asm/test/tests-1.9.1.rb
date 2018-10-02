@@ -3,40 +3,40 @@ require "./bootstrap"
 
 run_all "cons", {
 	'(add1 0)' => "1",
-  '(pair? (cons 1 2))' => "#t"
+  '(pair? (cons 1 2))' => "#t",
+  '(pair? 12)' => "#f",
+  '(pair? #t)' => "#f",
+  '(pair? #f)' => "#f",
+  '(pair? ())' => "#f",
+  '(integer? (cons 12 43))' => "#f",
+  '(boolean? (cons 12 43))' => "#f",
+  '(null? (cons 12 43))' => "#f",
+  '(not (cons 12 43))' => "#f",
+  '(if (cons 12 43) 32 43)' => "32",
+  '(car (cons 1 23))' => "1",
+  '(cdr (cons 43 123))' => "123",
+  '(let ((x (cons 1 2)) (y (cons 3 4))) (pair? x))' => "#t",
+  '(pair? (cons (cons 12 3) #f))' => "#t",
+  '(pair? (cons (cons 12 3) (cons #t #f)))' => "#t",
+  '(car (car (cons (cons 12 3) (cons #t #f))))' => "12",
+  '(cdr (car (cons (cons 12 3) (cons #t #f))))' => "3",
+  '(car (cdr (cons (cons 12 3) (cons #t #f))))' => "#t",
+  '(cdr (cdr (cons (cons 12 3) (cons #t #f))))' => "#f",
+  '(pair? (cons (* 1 1) 1))' => "#t",
+=begin
+  '(let ([x (let ([y (+ 1 2)]) (* y y))])
+     (cons x (+ x x)))' => "(10 . 18)",
+  '(let ([t0 (cons 1 2)] [t1 (cons 3 4)])
+     (let ([a0 (car t0)] [a1 (car t1)] [d0 (cdr t0)] [d1 (cdr t1)])
+       (let ([t0 (cons a0 d1)] [t1 (cons a1 d0)])
+         (cons t0 t1))))' => "((1 . 4) 3 . 2)",
+=end
+	'(add1 1)' => "2"
 }
 
 __END__
-(add-tests-with-string-output "cons"
-  [(fxadd1 0) => "1\n"]
-  [(pair? (cons 1 2)) => "#t\n"]
-  [(pair? 12) => "#f\n"]
-  [(pair? #t) => "#f\n"]
-  [(pair? #f) => "#f\n"]
-  [(pair? ()) => "#f\n"]
-  [(fixnum? (cons 12 43)) => "#f\n"]
-  [(boolean? (cons 12 43)) => "#f\n"]
-  [(null? (cons 12 43)) => "#f\n"]
-  [(not (cons 12 43)) => "#f\n"]
-  [(if (cons 12 43) 32 43) => "32\n"]
-  [(car (cons 1 23)) => "1\n"]
-  [(cdr (cons 43 123)) => "123\n"]
-  [(let ((x (cons 1 2)) (y (cons 3 4))) (pair? x)) => "#t\n"]
-  [(pair? (cons (cons 12 3) #f)) => "#t\n"]
-  [(pair? (cons (cons 12 3) (cons #t #f))) => "#t\n"]
-  [(car (car (cons (cons 12 3) (cons #t #f)))) => "12\n"]
-  [(cdr (car (cons (cons 12 3) (cons #t #f)))) => "3\n"]
-  [(car (cdr (cons (cons 12 3) (cons #t #f)))) => "#t\n"]
-  [(cdr (cdr (cons (cons 12 3) (cons #t #f)))) => "#f\n"]
-  [(pair? (cons (fx* 1 1) 1)) => "#t\n"]
-  [(let ([x (let ([y (fx+ 1 2)]) (fx* y y))])
-     (cons x (fx+ x x)))
-   => "(9 . 18)\n"]
-  [(let ([t0 (cons 1 2)] [t1 (cons 3 4)])
-     (let ([a0 (car t0)] [a1 (car t1)] [d0 (cdr t0)] [d1 (cdr t1)])
-       (let ([t0 (cons a0 d1)] [t1 (cons a1 d0)])
-         (cons t0 t1))))
-   => "((1 . 4) 3 . 2)\n"]
+
+
   [(let ([t (cons 1 2)])
      (let ([t t])
        (let ([t t])
