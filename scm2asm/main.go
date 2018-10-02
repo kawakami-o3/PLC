@@ -304,6 +304,16 @@ func emitHeapAlloc(size int) {
 	emit("\tadd $%d, %%rbp", allocSize*bytes)
 }
 
+func emitHeapAllocDynamic() {
+	emit("\tsub $1, %%rax")
+	emit("\tshr $%d, %%rax", objShift)
+	emit("\tadd $1, %%rax")
+	emit("\tshl $%d, %%rax", objShift+2)
+	emit("\tmov %%rbp, %%rdx")
+	emit("\tadd %%rbp, %%rbp")
+	emit("\tmov %%rdx, %%rax")
+}
+
 func emitStackLoad(si int) {
 	emitMov(rsp(si), eax(0))
 }
@@ -461,9 +471,12 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 	case "make-vector":
 		emitExpr(primcallOperand1(expr), si, env)
 		emitStackSave(si)
-
-		emit("\tandl $%d, %%eax", 1<<boolShift-1)
-		emitEq(boolTag)
+		emit("\tshr $%d, %%rax", fixnumShift)
+		emit("\tadd $1, %%rax")
+		emit("\tshl $%d, %%rax", fixnumShift)
+		emitHeapAllocDynamic()
+		emitStackToHeap(si, 0)
+		emit("\tor $%d, %%rax", vectorTag)
 	case "vector?":
 		emitIsObject(expr.list[1], si, env, vectorTag)
 	default:
