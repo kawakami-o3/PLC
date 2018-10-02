@@ -386,6 +386,9 @@ var primcallOpList = []string{
 
 	"make-vector",
 	"vector?",
+
+	"make-string",
+	"string?",
 }
 
 func nextStackIndex(si int) int {
@@ -479,6 +482,16 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 		emit("\tor $%d, %%rax", vectorTag)
 	case "vector?":
 		emitIsObject(expr.list[1], si, env, vectorTag)
+
+	case "make-string":
+		emitExprSave(primcallOperand1(expr), si, env)
+		emit("\tshr $%d, %%rax", fixnumShift)
+		emit("\tadd $%d, %%rax", wordSize)
+		emitHeapAllocDynamic()
+		emitStackToHeap(si, 0)
+		emit("\tor $%d, %%rax", stringTag)
+	case "string?":
+		emitIsObject(expr.list[1], si, env, stringTag)
 	default:
 		if isCarCdr(op) {
 		}
@@ -740,6 +753,10 @@ func emitApp(expr expression, si int, env *environment, isTail bool) {
 	}
 }
 
+func emitExprSave(expr expression, si int, env *environment) {
+	emitExpr(expr, si, env)
+	emitStackSave(si)
+}
 func emitExpr(expr expression, si int, env *environment) {
 	emitAnyExpr(expr, si, env, false)
 }
