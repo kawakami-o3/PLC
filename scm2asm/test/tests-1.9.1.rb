@@ -23,39 +23,29 @@ run_all "cons", {
   '(car (cdr (cons (cons 12 3) (cons #t #f))))' => "#t",
   '(cdr (cdr (cons (cons 12 3) (cons #t #f))))' => "#f",
   '(pair? (cons (* 1 1) 1))' => "#t",
-=begin
   '(let ([x (let ([y (+ 1 2)]) (* y y))])
-     (cons x (+ x x)))' => "(10 . 18)",
+     (cons x (+ x x)))' => "(9 . 18)",
   '(let ([t0 (cons 1 2)] [t1 (cons 3 4)])
      (let ([a0 (car t0)] [a1 (car t1)] [d0 (cdr t0)] [d1 (cdr t1)])
        (let ([t0 (cons a0 d1)] [t1 (cons a1 d0)])
          (cons t0 t1))))' => "((1 . 4) 3 . 2)",
-=end
-	'(add1 1)' => "2"
-}
-
-__END__
-
-
-  [(let ([t (cons 1 2)])
+  '(let ([t (cons 1 2)])
      (let ([t t])
        (let ([t t])
          (let ([t t])
-           t))))
-   => "(1 . 2)\n"]
-  [(let ([t (let ([t (let ([t (let ([t (cons 1 2)]) t)]) t)]) t)]) t)
-   => "(1 . 2)\n"]
-  [(let ([x ()])
+           t))))' => "(1 . 2)",
+  '(let ([t (let ([t (let ([t (let ([t (cons 1 2)]) t)]) t)]) t)]) t)' => "(1 . 2)",
+  '(let ([x ()])
      (let ([x (cons x x)])
        (let ([x (cons x x)])
          (let ([x (cons x x)])
-           (cons x x)))))
-   => "((((()) ()) (()) ()) ((()) ()) (()) ())\n"]
-  [(cons (let ([x #t]) (let ([y (cons x x)]) (cons x y)))
-         (cons (let ([x #f]) (let ([y (cons x x)]) (cons y x))) 
-               ())) 
-   => "((#t #t . #t) ((#f . #f) . #f))\n"]
-)
+           (cons x x)))))' => "((((()) ()) (()) ()) ((()) ()) (()) ())",
+  '(cons (let ([x #t]) (let ([y (cons x x)]) (cons x y)))
+         (cons (let ([x #f]) (let ([y (cons x x)]) (cons y x)))
+               ()))' => "((#t #t . #t) ((#f . #f) . #f))"
+}
+
+__END__
 
 (add-tests-with-string-output "begin/implicit-begin"
  [(begin 12) => "12\n"]
@@ -66,7 +56,7 @@ __END__
     (cons 1 t)
     t) => "(1 . 2)\n"]
  [(let ([t (cons 1 2)])
-    (if (pair? t) 
+    (if (pair? t)
         (begin t)
         12)) => "(1 . 2)\n"]
 )
