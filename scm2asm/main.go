@@ -200,6 +200,14 @@ func isIf(e expression) bool {
 	return e.list[0].value == "if"
 }
 
+func isBegin(e expression) bool {
+	if len(e.list) < 2 {
+		return false
+	}
+
+	return e.list[0].value == "begin"
+}
+
 func isLet(e expression) bool {
 	if len(e.list) == 0 {
 		return false
@@ -572,6 +580,7 @@ func bindings(e expression) []expression {
 
 func body(e expression) expression {
 	i := 2
+	// for a label
 	if len(e.list[1].value) > 0 {
 		i += 1
 	}
@@ -579,8 +588,10 @@ func body(e expression) expression {
 	if i+1 == len(e.list) {
 		return e.list[i]
 	} else {
-		ret := expression{}
-		ret.list = e.list[i:]
+		ret := expression{
+			list: []expression{expression{value: "begin"}},
+		}
+		ret.list = append(ret.list, e.list[i:]...)
 		return ret
 	}
 }
@@ -616,8 +627,11 @@ func mapRhs(bindings []expression) []expression {
 func letrecBindings(expr expression) []expression {
 	return expr.list[1].list
 }
+
 func letrecBody(expr expression) expression {
+	// FIXME
 	return expr.list[2]
+	//return body(expr)
 }
 
 func emitLetrec(expr expression) {
@@ -715,6 +729,20 @@ func emitIf(test, conseq, altern expression, si int, env *environment, isTail bo
 	emitLabel(endLabel)
 }
 
+func emitBegin(expr expression, si int, env *environment, isTail bool) {
+	emitSeq(expr.list[1:], si, env, isTail)
+}
+
+func emitSeq(exprs []expression, si int, env *environment, isTail bool) {
+	for i, e := range exprs {
+		if i == len(exprs)-1 {
+			emitAnyExpr(e, si, env, isTail)
+		} else {
+			emitExpr(e, si, env)
+		}
+	}
+}
+
 func isApp(expr expression, env *environment) bool {
 	_, ok := env.labels[expr.list[0].value]
 	return ok
@@ -803,6 +831,9 @@ func emitAnyExpr(expr expression, si int, env *environment, isTail bool) {
 		log += "letrec"
 		//emitLetrec(bindings(expr), body(expr), si, env)
 		emitLetrec(expr)
+	} else if isBegin(expr) {
+		log += "begin"
+		emitBegin(expr, si, env, isTail)
 	} else if isPrimcall(expr) {
 		log += "primcall"
 		emitPrimitiveCall(expr, si, env)

@@ -48,5 +48,9 @@ go build -o scm2asm.exe
 #       (let ([t0 (cons a0 d1)] [t1 (cons a1 d0)])
 #         (cons t0 t1))))'
 #run '(integer? (cons 12 43))'
-run '(boolean? (cons 12 43))'
-
+#run '(boolean? (cons 12 43))'
+#run '(begin 12)'
+run '(let ([t (begin 13 (cons 1 2))])
+    (cons 1 t)
+    t)'
+ 

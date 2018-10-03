@@ -45,21 +45,24 @@ run_all "cons", {
                ()))' => "((#t #t . #t) ((#f . #f) . #f))"
 }
 
-__END__
 
-(add-tests-with-string-output "begin/implicit-begin"
- [(begin 12) => "12\n"]
- [(begin 13 122) => "122\n"]
- [(begin 123 2343 #t) => "#t\n"]
- [(let ([t (begin 12 (cons 1 2))]) (begin t t)) => "(1 . 2)\n"]
- [(let ([t (begin 13 (cons 1 2))])
+run_all "begin/implicit-begin", {
+ '(begin 12)' => "12",
+ '(begin 13 122)' => "122",
+ '(begin 123 2343 #t)' => "#t",
+ '(let ([t (begin 12 (cons 1 2))]) (begin t t))' => "(1 . 2)",
+ '(let ([t (begin 13 (cons 1 2))])
     (cons 1 t)
-    t) => "(1 . 2)\n"]
- [(let ([t (cons 1 2)])
+    t)' => "(1 . 2)",
+ '(let ([t (cons 1 2)])
     (if (pair? t)
         (begin t)
-        12)) => "(1 . 2)\n"]
-)
+        12))' => "(1 . 2)"
+}
+
+
+
+__END__
 
 (add-tests-with-string-output "set-car! set-cdr!"
   [(let ([x (cons 1 2)])
