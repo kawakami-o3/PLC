@@ -253,11 +253,11 @@ func primcallOp(e expression) expression {
 	return e.list[0]
 }
 
-func primcallOperand1(e expression) expression {
+func operand1(e expression) expression {
 	return e.list[1]
 }
 
-func primcallOperand2(e expression) expression {
+func operand2(e expression) expression {
 	return e.list[2]
 }
 
@@ -335,7 +335,7 @@ func emitCmpBool(cmp string) {
 }
 
 func emitCmpBinop(cmp string, expr expression, si int, env *environment) {
-	emitOperand2(expr, si, env)
+	emitBinop(operand1(expr), operand2(expr), si, env)
 	emit("\tcmp %%rax, %d(%%rsp)", si)
 	emitCmpBool(cmp)
 }
@@ -347,10 +347,13 @@ func emitIsObject(expr expression, si int, env *environment, tag int) {
 	emitCmpBool(sete)
 }
 
-func emitOperand2(expr expression, si int, env *environment) {
-	emitExpr(primcallOperand1(expr), si, env)
+//func emitBinop(expr expression, si int, env *environment) {
+func emitBinop(arg1, arg2 expression, si int, env *environment) {
+	//emitExpr(operand1(expr), si, env)
+	emitExpr(arg1, si, env)
 	emitStackSave(si)
-	emitExpr(primcallOperand2(expr), nextStackIndex(si), env)
+	//emitExpr(operand2(expr), nextStackIndex(si), env)
+	emitExpr(arg2, nextStackIndex(si), env)
 }
 
 func emitMov(a, b string) {
@@ -391,6 +394,9 @@ var primcallOpList = []string{
 	"cdr",
 	"cons",
 	"pair?",
+	"set-car!",
+	"set-cdr!",
+	"eq?",
 
 	"make-vector",
 	"vector?",
@@ -407,49 +413,49 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 	op := primcallOp(expr).value
 	switch op {
 	case "add1":
-		emitExpr(primcallOperand1(expr), si, env)
+		emitExpr(operand1(expr), si, env)
 		emit("\tadd $%d, %%rax", fixnum1)
 	case "sub1":
-		emitExpr(primcallOperand1(expr), si, env)
+		emitExpr(operand1(expr), si, env)
 		emit("\tsub $%d, %%rax", fixnum1)
 	case "integer->char":
-		emitExpr(primcallOperand1(expr), si, env)
+		emitExpr(operand1(expr), si, env)
 		emit("\tshl $%d, %%rax", charShift-fixnumShift)
 		emit("\tor $%d, %%rax", charTag)
 	case "char->integer":
-		emitExpr(primcallOperand1(expr), si, env)
+		emitExpr(operand1(expr), si, env)
 		emit("\tshr $%d, %%rax", charShift-fixnumShift)
 	case "zero?":
-		emitExpr(primcallOperand1(expr), si, env)
+		emitExpr(operand1(expr), si, env)
 		emit("\tcmp $%d, %%rax", fixnumTag)
 		emitCmpBool(sete)
 	case "null?":
-		emitExpr(primcallOperand1(expr), si, env)
+		emitExpr(operand1(expr), si, env)
 		emit("\tcmp $%d, %%al", emptyList)
 		emitCmpBool(sete)
 	case "not":
-		emitExpr(primcallOperand1(expr), si, env)
+		emitExpr(operand1(expr), si, env)
 		emit("\tcmp $%d, %%al", boolFalse)
 		emitCmpBool(sete)
 	case "integer?":
-		emitExpr(primcallOperand1(expr), si, env)
+		emitExpr(operand1(expr), si, env)
 		emit("\tand $%d, %%al", 1<<fixnumShift-1)
 		emit("\tcmp $%d, %%al", fixnumTag)
 		emitCmpBool(sete)
 	case "boolean?":
-		emitExpr(primcallOperand1(expr), si, env)
+		emitExpr(operand1(expr), si, env)
 		emit("\tand $%d, %%al", 1<<boolShift-1)
 		emit("\tcmp $%d, %%al", boolTag)
 		emitCmpBool(sete)
 	case "+":
-		emitOperand2(expr, si, env)
+		emitBinop(operand1(expr), operand2(expr), si, env)
 		emit("\tadd %d(%%rsp), %%rax", si)
 	case "-":
-		emitOperand2(expr, si, env)
+		emitBinop(operand1(expr), operand2(expr), si, env)
 		emit("\tsub %%rax, %d(%%rsp)", si)
 		emitStackLoad(si)
 	case "*":
-		emitOperand2(expr, si, env)
+		emitBinop(operand1(expr), operand2(expr), si, env)
 		emit("\tshr $%d, %%rax", fixnumShift)
 		emit("\tmulq %d(%%rsp)", si)
 	case "=":
@@ -465,13 +471,13 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 	case "char=?":
 		emitCmpBinop(sete, expr, si, env)
 	case "car":
-		emitExpr(primcallOperand1(expr), si, env)
+		emitExpr(operand1(expr), si, env)
 		emitHeapLoad(pairCar - pairTag)
 	case "cdr":
-		emitExpr(primcallOperand1(expr), si, env)
+		emitExpr(operand1(expr), si, env)
 		emitHeapLoad(pairCdr - pairTag)
 	case "cons":
-		emitOperand2(expr, si, env)
+		emitBinop(operand1(expr), operand2(expr), si, env)
 		emitStackSave(nextStackIndex(si))
 		emitHeapAlloc(pairSize)
 		emit("\tor $%d, %%rax", pairTag)
@@ -479,9 +485,19 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 		emitStackToHeap(nextStackIndex(si), pairCdr-pairTag)
 	case "pair?":
 		emitIsObject(expr.list[1], si, env, pairTag)
+	case "set-car!":
+		emitBinop(operand2(expr), operand1(expr), si, env)
+		emitStackToHeap(si, pairCar-pairTag)
+	case "set-cdr!":
+		emitBinop(operand2(expr), operand1(expr), si, env)
+		emitStackToHeap(si, pairCdr-pairTag)
+	case "eq?":
+		emitBinop(operand1(expr), operand2(expr), si, env)
+		emit("\tcmp %d(%%rsp), %%rax", si)
+		emitCmpBool(sete)
 
 	case "make-vector":
-		emitExpr(primcallOperand1(expr), si, env)
+		emitExpr(operand1(expr), si, env)
 		emitStackSave(si)
 		emit("\tshr $%d, %%rax", fixnumShift)
 		emit("\tadd $1, %%rax")
@@ -493,7 +509,7 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 		emitIsObject(expr.list[1], si, env, vectorTag)
 
 	case "make-string":
-		emitExprSave(primcallOperand1(expr), si, env)
+		emitExprSave(operand1(expr), si, env)
 		emit("\tshr $%d, %%rax", fixnumShift)
 		emit("\tadd $%d, %%rax", wordSize)
 		emitHeapAllocDynamic()
