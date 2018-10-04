@@ -25,8 +25,7 @@ go build -o scm2asm.exe
 #run '(letrec ([f (lambda (x) (if (zero? x) x (f (sub1 x))))]) (f 0))'
 #run '(letrec ([sum (lambda (n ac) (if (zero? n) ac (app sum (sub1 n) (+ n ac))))]) (sum 10 0))'
 
-
-run '(letrec ([f (lambda (x) (+ x 12))]) (f (f 10)))'
+#run '(letrec ([f (lambda (x) (+ x 12))]) (f (f 10)))'
 
 #run '(letrec ([e (lambda (x) (if (zero? x) #t (o (sub1 x))))]
 #            [o (lambda (x) (if (zero? x) #f (e (sub1 x))))])
@@ -56,4 +55,10 @@ run '(letrec ([f (lambda (x) (+ x 12))]) (f (f 10)))'
 #run '(let ([t (begin 13 (cons 1 2))])
 #    (cons 1 t)
 #    t)'
- 
+
+
+run '(let ([v (make-vector 1)] [y (cons 1 2)])
+     (vector-set! v 0 y)
+     (cons y (eq? y (vector-ref v 0))))'
+
+

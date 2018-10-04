@@ -40,6 +40,7 @@ const (
 	stringTag = 0x06
 
 	wordSize       = 8
+	wordShift      = 3
 	stackIndexInit = -wordSize
 
 	tokenTrue  = "#t"
@@ -261,6 +262,10 @@ func operand2(e expression) expression {
 	return e.list[2]
 }
 
+func operand3(e expression) expression {
+	return e.list[3]
+}
+
 func emit(s string, v ...interface{}) {
 	fmt.Println(fmt.Sprintf(s, v...))
 }
@@ -304,7 +309,7 @@ func emitHeapAllocDynamic() {
 	emit("\tadd $1, %%rax")
 	emit("\tshl $%d, %%rax", objShift+2)
 	emit("\tmov %%rbp, %%rdx")
-	emit("\tadd %%rbp, %%rbp")
+	emit("\tadd %%rax, %%rbp")
 	emit("\tmov %%rdx, %%rax")
 }
 
@@ -400,6 +405,9 @@ var primcallOpList = []string{
 
 	"make-vector",
 	"vector?",
+	"vector-length",
+	"vector-set!",
+	"vector-ref",
 
 	"make-string",
 	"string?",
@@ -501,12 +509,37 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 		emitStackSave(si)
 		emit("\tshr $%d, %%rax", fixnumShift)
 		emit("\tadd $1, %%rax")
-		emit("\tshl $%d, %%rax", fixnumShift)
+		emit("\tshl $%d, %%rax", wordShift)
 		emitHeapAllocDynamic()
 		emitStackToHeap(si, 0)
 		emit("\tor $%d, %%rax", vectorTag)
 	case "vector?":
 		emitIsObject(expr.list[1], si, env, vectorTag)
+	case "vector-length":
+		emitExpr(operand1(expr), si, env)
+		emitHeapLoad(-vectorTag)
+	case "vector-set!":
+		vector := operand1(expr)
+		index := operand2(expr)
+		value := operand3(expr)
+		emitExpr(index, si, env)
+		emit("\tshl $%d, %%rax", objShift-fixnumShift)
+		emit("\tadd $%d, %%rax", wordSize)
+		emitStackSave(si)
+		emitExprSave(value, nextStackIndex(si), env)
+		emitExpr(vector, si, env)
+		emit("\tadd %d(%%rsp), %%rax", si)
+		emitStackToHeap(nextStackIndex(si), -vectorTag)
+	case "vector-ref":
+		vector := operand1(expr)
+		index := operand2(expr)
+		emitExpr(index, si, env)
+		emit("\tshl $%d, %%rax", objShift-fixnumShift)
+		emit("\tadd $%d, %%rax", wordSize)
+		emitStackSave(si)
+		emitExpr(vector, si, env)
+		emit("\tadd %d(%%rsp), %%rax", si)
+		emitHeapLoad(-vectorTag)
 
 	case "make-string":
 		emitExprSave(operand1(expr), si, env)

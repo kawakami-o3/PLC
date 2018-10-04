@@ -15,7 +15,7 @@ def run v, result = nil
 	else
 		system "../scm2asm.exe -- #{v} > scheme_entry.s"
 	end
-	system "gcc -o a.out scheme_entry.s main.c"
+	system "gcc -g -o a.out scheme_entry.s main.c"
 	#a = `./a.out`
 	o, e, s = Open3.capture3("./a.out")
 
@@ -44,6 +44,6 @@ end
 def run_all name, tests
 	puts "Test: #{name}"
 	tests.each do |k,v|
-		run k,v
+		run k,v.chomp
 	end
 end
