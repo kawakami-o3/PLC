@@ -46,8 +46,12 @@ const (
 	tokenFalse = "#f"
 	tokenEmpty = "()"
 
-	sete = "sete"
-	setx = "setx"
+	sete  = "sete"
+	setl  = "setl"
+	setle = "setle"
+	setg  = "setg"
+	setge = "setge"
+	setx  = "setx"
 
 	heapCellSize = 8
 )
@@ -159,10 +163,6 @@ func isInitial(c byte) bool {
 func isSubsequent(c byte) bool {
 	_, ok := specialSubsequent[c]
 	return isInitial(c) || unicode.IsDigit(rune(c)) || ok
-}
-
-func isEmpty(e expression) bool {
-	return e.value == tokenEmpty
 }
 
 func isVariable(e expression) bool {
@@ -281,6 +281,7 @@ func rsp(index int) string {
 	return addr("%rsp", index)
 }
 
+/*
 func esi(index int) string {
 	//return fmt.Sprintf("%d(%%esi)", index)
 	return addr("%esi", index)
@@ -289,22 +290,7 @@ func esi(index int) string {
 func num(i int) string {
 	return fmt.Sprintf("$%d", i)
 }
-
-func emitEq(target int) {
-	emit("\tcmp $%d, %%al", target)
-	emit("\tmov $0, %%rax")
-	emit("\tsete %%al")
-	emit("\tsall $%d, %%rax", boolShift)
-	emit("\torl $%d, %%rax", boolTag)
-}
-
-func emitCompStack(op string, si int) {
-	emit("\tcmpl %d(%%rsp), %%rax", si)
-	emit("\tmov $0, %%rax")
-	emit("\t%s %%al", op)
-	emit("\tsall $%d, %%rax", boolShift)
-	emit("\torl $%d, %%rax", boolTag)
-}
+*/
 
 func emitHeapAlloc(size int) {
 	allocSize := (((size - 1) / heapCellSize) + 1) * heapCellSize
@@ -348,6 +334,12 @@ func emitCmpBool(cmp string) {
 	emit("\tor $%d, %%al", boolFalse)
 }
 
+func emitCmpBinop(cmp string, expr expression, si int, env *environment) {
+	emitOperand2(expr, si, env)
+	emit("\tcmp %%rax, %d(%%rsp)", si)
+	emitCmpBool(cmp)
+}
+
 func emitIsObject(expr expression, si int, env *environment, tag int) {
 	emitExpr(expr, si, env)
 	emit("\tand $%d, %%al", objMask)
@@ -365,6 +357,7 @@ func emitMov(a, b string) {
 	emit("\tmov %s, %s", a, b)
 }
 
+/*
 func emitOrl(a, b string) {
 	emit("\torl %s, %s", a, b)
 }
@@ -372,6 +365,7 @@ func emitOrl(a, b string) {
 func emitAdd(a, b string) {
 	emit("\tadd %s, %s", a, b)
 }
+*/
 
 var primcallOpList = []string{
 	"add1",
@@ -459,23 +453,17 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 		emit("\tshr $%d, %%rax", fixnumShift)
 		emit("\tmulq %d(%%rsp)", si)
 	case "=":
-		emitOperand2(expr, si, env)
-		emitCompStack("sete", si)
+		emitCmpBinop(sete, expr, si, env)
 	case "<":
-		emitOperand2(expr, si, env)
-		emitCompStack("setl", si)
+		emitCmpBinop(setl, expr, si, env)
 	case "<=":
-		emitOperand2(expr, si, env)
-		emitCompStack("setle", si)
+		emitCmpBinop(setle, expr, si, env)
 	case ">":
-		emitOperand2(expr, si, env)
-		emitCompStack("setg", si)
+		emitCmpBinop(setg, expr, si, env)
 	case ">=":
-		emitOperand2(expr, si, env)
-		emitCompStack("setge", si)
+		emitCmpBinop(setge, expr, si, env)
 	case "char=?":
-		emitOperand2(expr, si, env)
-		emitCompStack("sete", si)
+		emitCmpBinop(sete, expr, si, env)
 	case "car":
 		emitExpr(primcallOperand1(expr), si, env)
 		emitHeapLoad(pairCar - pairTag)
@@ -535,7 +523,6 @@ func newEnv() *environment {
 func makeInitialEnv(lvars []expression, labels []string) *environment {
 	env := newEnv()
 	for i := 0; i < len(lvars); i++ {
-		//env.exps[labels[i]] = lvars[i]
 		env.labels[lvars[i].value] = labels[i]
 	}
 	return env
@@ -706,8 +693,8 @@ func emitLabel(label string) {
 	emit("%s:", label)
 }
 
-func emitCmpl(a, b string) {
-	emit("\tcmpl %s, %s", a, b)
+func emitCmp(a, b string) {
+	emit("\tcmp %s, %s", a, b)
 }
 
 func emitRetIf(isTail bool) {
