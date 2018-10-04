@@ -417,17 +417,18 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 		emit("\tadd $%d, %%rax", fixnum1)
 	case "sub1":
 		emitExpr(primcallOperand1(expr), si, env)
-		emit("\tsubl $%d, %%rax", fixnum1)
+		emit("\tsub $%d, %%rax", fixnum1)
 	case "integer->char":
 		emitExpr(primcallOperand1(expr), si, env)
-		emit("\tsall $%d, %%rax", charShift-fixnumShift)
-		emit("\torl $%d, %%rax", charTag)
+		emit("\tshl $%d, %%rax", charShift-fixnumShift)
+		emit("\tor $%d, %%rax", charTag)
 	case "char->integer":
 		emitExpr(primcallOperand1(expr), si, env)
-		emit("\tsarl $%d, %%rax", charShift-fixnumShift)
+		emit("\tshr $%d, %%rax", charShift-fixnumShift)
 	case "zero?":
 		emitExpr(primcallOperand1(expr), si, env)
-		emitEq(0)
+		emit("\tcmp $%d, %%rax", fixnumTag)
+		emitCmpBool(sete)
 	case "null?":
 		emitExpr(primcallOperand1(expr), si, env)
 		emit("\tcmp $%d, %%al", emptyList)
@@ -451,7 +452,8 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 		emit("\tadd %d(%%rsp), %%rax", si)
 	case "-":
 		emitOperand2(expr, si, env)
-		emit("\tsubl %d(%%rsp), %%rax", si)
+		emit("\tsub %%rax, %d(%%rsp)", si)
+		emitStackLoad(si)
 	case "*":
 		emitOperand2(expr, si, env)
 		emit("\tshr $%d, %%rax", fixnumShift)
@@ -781,7 +783,7 @@ func emitApp(expr expression, si int, env *environment, isTail bool) {
 		}
 		emitJmp(label)
 	} else {
-		emitArguments(callArgs, si-2*wordSize, env)
+		emitArguments(callArgs, si-wordSize, env)
 		emitAdjustBase(si + wordSize)
 		label, err := env.lookupLabel(callTarget)
 		if err != nil {
