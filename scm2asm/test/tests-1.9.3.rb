@@ -2,20 +2,22 @@
 require "./bootstrap"
 
 run_all "strings", {
+  '(string? (make-string 0))' => "#t",
+  '(make-string 0)' => "\"\"\n",
+  '(let ([s (make-string 1)])
+     (string-set! s 0 #\a)
+     (string-ref s 0))' => "#\\a\n",
+  '(let ([s (make-string 2)])
+     (string-set! s 0 #\a)
+     (string-set! s 1 #\b)
+     (cons (string-ref s 0) (string-ref s 1)))' => "(#\\a . #\\b)\n",
+
   '(string? (make-string 0))' => "#t"
 }
 
 __END__
 (add-tests-with-string-output "strings"
-  [(string? (make-string 0)) => "#t\n"]
-  [(make-string 0) => "\"\"\n"]
-  [(let ([s (make-string 1)])
-     (string-set! s 0 #\a)
-     (string-ref s 0)) => "#\\a\n"]
-  [(let ([s (make-string 2)])
-     (string-set! s 0 #\a)
-     (string-set! s 1 #\b)
-     (cons (string-ref s 0) (string-ref s 1))) => "(#\\a . #\\b)\n"]
+
   [(let ([i 0])
     (let ([s (make-string 1)])
      (string-set! s i #\a)

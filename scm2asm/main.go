@@ -411,6 +411,7 @@ var primcallOpList = []string{
 
 	"make-string",
 	"string?",
+	"string-set!",
 }
 
 func nextStackIndex(si int) int {
