@@ -412,6 +412,8 @@ var primcallOpList = []string{
 	"make-string",
 	"string?",
 	"string-set!",
+	"string-ref",
+	"string-length",
 }
 
 func nextStackIndex(si int) int {
@@ -551,6 +553,37 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 		emit("\tor $%d, %%rax", stringTag)
 	case "string?":
 		emitIsObject(expr.list[1], si, env, stringTag)
+	case "string-set!":
+		str := operand1(expr)
+		index := operand2(expr)
+		value := operand3(expr)
+		emitExpr(index, si, env)
+		emit("\tshr $%d, %%rax", fixnumShift)
+		emit("\tadd $%d, %%rax", wordSize)
+		emitStackSave(si)
+		emitExpr(value, nextStackIndex(si), env)
+		emit("\tshr $%d, %%rax", charShift)
+		emitStackSave(nextStackIndex(si))
+		emitExpr(str, si, env)
+		emit("\tadd %d(%%rsp), %%rax", si)
+		emit("\tmov %d(%%rsp), %%rdx", nextStackIndex(si))
+		emit("\tmovb %%dl, %d(%%rax)", -stringTag)
+	case "string-ref":
+		str := operand1(expr)
+		index := operand2(expr)
+		emitExpr(index, si, env)
+		emit("\tshr $%d, %%rax", fixnumShift)
+		emit("\tadd $%d, %%rax", wordSize)
+		emitStackSave(si)
+		emitExpr(str, si, env)
+		emit("\tadd %d(%%rsp), %%rax", si)
+		emit("\tmovzbq %d(%%rax), %%rax", -stringTag)
+		emit("\tshl $%d, %%rax", charShift)
+		emit("\tor $%d, %%rax", charTag)
+	case "string-length":
+		emitExpr(operand1(expr), si, env)
+		emitHeapLoad(-stringTag)
+
 	default:
 		if isCarCdr(op) {
 		}
@@ -1003,7 +1036,7 @@ func parse(x string) expression {
 
 func emitFunctionHeader(label string) {
 	emit("\t.text")
-	emit("\t.global %s", label)
+	emit("\t.globl %s", label)
 	emit("\t.type %s, @function", label)
 	emitLabel(label)
 }

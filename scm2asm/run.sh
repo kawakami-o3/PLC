@@ -56,9 +56,16 @@ go build -o scm2asm.exe
 #    (cons 1 t)
 #    t)'
 
+#run '(let ([v (make-vector 1)] [y (cons 1 2)])
+#     (vector-set! v 0 y)
+#     (cons y (eq? y (vector-ref v 0))))'
 
-run '(let ([v (make-vector 1)] [y (cons 1 2)])
-     (vector-set! v 0 y)
-     (cons y (eq? y (vector-ref v 0))))'
+#run '(let ([s (make-string 2)])
+#     (string-set! s 0 #\a)
+#     (string-set! s 1 #\b)
+#     (cons (string-ref s 0) (string-ref s 1)))'
 
 
+run '(let ([s (make-string 1)])
+      (string-set! s 0 #\\)
+      s)'
