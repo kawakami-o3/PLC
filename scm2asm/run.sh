@@ -5,6 +5,7 @@ run() {
 	./scm2asm.exe -- "$*"
 }
 
+rm -f scheme_entry.s
 goimports -w -l .
 go build -o scm2asm.exe
 
