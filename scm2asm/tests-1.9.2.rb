@@ -75,8 +75,6 @@ run_all "vectors", {
                       (if (vector? v0) v0 v1)
                       (sub1 (vector-length (if (vector? v0) v0 v1))))))
       (cons v0 v1)))' => "(#(2) . #(13))\n",
-
-	'(vector? #f)' => "#f\n"
 }
 
 run_all "more vectors", {
