@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strconv"
 	"unicode"
+
+	"github.com/k0kubun/pp"
 )
 
 const (
@@ -39,6 +41,8 @@ const (
 	vectorTag = 0x05
 	stringTag = 0x06
 
+	closureTag = 0x02
+
 	wordSize       = 8
 	wordShift      = 3
 	stackIndexInit = -wordSize
@@ -53,6 +57,8 @@ const (
 	setg  = "setg"
 	setge = "setge"
 	setx  = "setx"
+
+	closure = "closure"
 
 	heapCellSize = 8
 )
@@ -167,6 +173,7 @@ func isSubsequent(c byte) bool {
 }
 
 func isVariable(e expression) bool {
+	// = symbol?
 	x := e.value
 	if len(x) == 0 {
 		return false
@@ -227,6 +234,19 @@ func isLetrec(e expression) bool {
 	return v == "letrec"
 }
 
+func isList(e expression) bool {
+	return len(e.list) > 0
+}
+
+func isTaggedList(tag string, e expression) bool {
+	// TODO not null?
+	return isList(e) && e.list[0].value == tag
+}
+
+func isClosure(e expression) bool {
+	return isTaggedList(closure, e)
+}
+
 func isCarCdr(op string) bool {
 	if len(op) >= 3 && op[0] == 'c' && op[len(op)-1] == 'r' {
 		for i := 1; i < len(op)-1; i++ {
@@ -243,6 +263,11 @@ func isCarCdr(op string) bool {
 func isPrimcall(e expression) bool {
 	op := primcallOp(e).value
 	for _, s := range primcallOpList {
+		if op == s {
+			return true
+		}
+	}
+	for s, _ := range primcallOpMap {
 		if op == s {
 			return true
 		}
@@ -339,8 +364,8 @@ func emitCmpBool(cmp string) {
 	emit("\tor $%d, %%al", boolFalse)
 }
 
-func emitCmpBinop(cmp string, expr expression, si int, env *environment) {
-	emitBinop(operand1(expr), operand2(expr), si, env)
+func emitCmpBinop(cmp string, si int, env *environment, args ...expression) {
+	emitBinop(args[0], args[1], si, env)
 	emit("\tcmp %%rax, %d(%%rsp)", si)
 	emitCmpBool(cmp)
 }
@@ -416,6 +441,18 @@ var primcallOpList = []string{
 	"string-length",
 }
 
+var primcallOpMap map[string]func(expression, int, *environment)
+
+func initPrimCallOpMap() {
+	primcallOpMap = map[string]func(expression, int, *environment){}
+
+	primcallOpMap["procedure?"] = emitIsProcedure
+}
+
+func emitIsProcedure(expr expression, si int, env *environment) {
+	emitIsObject(expr.list[1], si, env, closureTag)
+}
+
 func nextStackIndex(si int) int {
 	return si - wordSize
 }
@@ -470,17 +507,17 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 		emit("\tshr $%d, %%rax", fixnumShift)
 		emit("\tmulq %d(%%rsp)", si)
 	case "=":
-		emitCmpBinop(sete, expr, si, env)
+		emitCmpBinop(sete, si, env, expr.list...)
 	case "<":
-		emitCmpBinop(setl, expr, si, env)
+		emitCmpBinop(setl, si, env, expr.list...)
 	case "<=":
-		emitCmpBinop(setle, expr, si, env)
+		emitCmpBinop(setle, si, env, expr.list...)
 	case ">":
-		emitCmpBinop(setg, expr, si, env)
+		emitCmpBinop(setg, si, env, expr.list...)
 	case ">=":
-		emitCmpBinop(setge, expr, si, env)
+		emitCmpBinop(setge, si, env, expr.list...)
 	case "char=?":
-		emitCmpBinop(sete, expr, si, env)
+		emitCmpBinop(sete, si, env, expr.list...)
 	case "car":
 		emitExpr(operand1(expr), si, env)
 		emitHeapLoad(pairCar - pairTag)
@@ -588,6 +625,12 @@ func emitPrimitiveCall(expr expression, si int, env *environment) {
 		if isCarCdr(op) {
 		}
 	}
+	for opLabel, emitter := range primcallOpMap {
+		if op == opLabel {
+			emitter(expr, si, env)
+			return
+		}
+	}
 }
 
 type environment struct {
@@ -677,7 +720,7 @@ func emitLet(bindings []expression, body expression, si int, env *environment, i
 		si -= wordSize
 	}
 
-	emitAnyExpr(body, si, env, isTail)
+	emitAnyExpr(si, env, isTail, body)
 }
 
 func mapLhs(bindings []expression) []expression {
@@ -792,12 +835,12 @@ func emitIf(test, conseq, altern expression, si int, env *environment, isTail bo
 	emitExpr(test, si, env)
 	emit("\tcmp $%d, %%al", boolFalse)
 	emitJe(altLabel)
-	emitAnyExpr(conseq, si, env, isTail)
+	emitAnyExpr(si, env, isTail, conseq)
 	if !isTail {
 		emitJmp(endLabel)
 	}
 	emitLabel(altLabel)
-	emitAnyExpr(altern, si, env, isTail)
+	emitAnyExpr(si, env, isTail, altern)
 	emitLabel(endLabel)
 }
 
@@ -808,7 +851,7 @@ func emitBegin(expr expression, si int, env *environment, isTail bool) {
 func emitSeq(exprs []expression, si int, env *environment, isTail bool) {
 	for i, e := range exprs {
 		if i == len(exprs)-1 {
-			emitAnyExpr(e, si, env, isTail)
+			emitAnyExpr(si, env, isTail, e)
 		} else {
 			emitExpr(e, si, env)
 		}
@@ -864,60 +907,66 @@ func emitApp(expr expression, si int, env *environment, isTail bool) {
 	}
 }
 
+func emitClosure(expr expression, si int, env *environment, isTail bool) {
+	panic("closure is not implemented yet.")
+}
+
 func emitExprSave(expr expression, si int, env *environment) {
 	emitExpr(expr, si, env)
 	emitStackSave(si)
 }
 
 func emitExpr(expr expression, si int, env *environment) {
-	emitAnyExpr(expr, si, env, false)
+	emitAnyExpr(si, env, false, expr)
 }
 
 func emitTailExpr(expr expression, si int, env *environment) {
-	emitAnyExpr(expr, si, env, true)
+	emitAnyExpr(si, env, true, expr)
 }
 
-func emitAnyExpr(expr expression, si int, env *environment, isTail bool) {
-	log := ""
+func emitImmediate(expr expression) {
+	n, err := immediateRep(expr.value)
+	if err != nil {
+		panic(err)
+	}
+	emit("\tmov $%d, %%rax", n)
+}
+
+func emitVariableRef(expr expression, si int, env *environment) {
+	if n, err := env.lookup(expr); err == nil {
+		emitStackLoad(n)
+	}
+}
+
+func emitAnyExpr(si int, env *environment, isTail bool, expr expression) {
 	if isImmediate(expr) {
-		log += "immediate"
-		n, err := immediateRep(expr.value)
-		if err != nil {
-			panic(err)
-		}
-		emit("\tmov $%d, %%rax", n)
+		emitImmediate(expr)
 		emitRetIf(isTail)
 	} else if isVariable(expr) {
-		log += "variable"
-		if n, err := env.lookup(expr); err == nil {
-			emitStackLoad(n)
-		}
+		emitVariableRef(expr, si, env)
+		emitRetIf(isTail)
+	} else if isClosure(expr) {
+		emitClosure(expr, si, env, isTail)
 		emitRetIf(isTail)
 	} else if isIf(expr) {
-		log += "if"
 		emitIf(expr.list[1], expr.list[2], expr.list[3], si, env, isTail)
 	} else if isLet(expr) {
-		log += "let"
 		emitLet(bindings(expr), body(expr), si, env, isTail)
 	} else if isLetrec(expr) {
-		log += "letrec"
 		//emitLetrec(bindings(expr), body(expr), si, env)
 		emitLetrec(expr)
 	} else if isBegin(expr) {
-		log += "begin"
 		emitBegin(expr, si, env, isTail)
 	} else if isPrimcall(expr) {
-		log += "primcall"
 		emitPrimitiveCall(expr, si, env)
 		emitRetIf(isTail)
 	} else if isApp(expr, env) {
-		log += "app"
 		emitApp(expr, si, env, isTail)
 	} else {
+		pp.Println(expr)
 		panic(fmt.Sprintf("[emitAnyExpr] not implemented. %v", expr))
 	}
 
-	//fmt.Println("[debug]", log)
 }
 
 type expression struct {
@@ -1085,6 +1134,8 @@ func compileProgram(x string) {
 func main() {
 	flag.Parse()
 	target := flag.Args()[0]
+
+	initPrimCallOpMap()
 
 	compileProgram(target)
 }

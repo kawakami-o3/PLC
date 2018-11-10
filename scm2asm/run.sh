@@ -70,3 +70,8 @@ go build -o scm2asm.exe
 run '(let ([s (make-string 1)])
       (string-set! s 0 #\\)
       s)'
+
+
+#run '(procedure? (lambda (x) x))'
+
+
