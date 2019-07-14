@@ -26,8 +26,8 @@
 #define pair_cdr  8
 
 #define vector_tag 0x05
-
 #define string_tag 0x06
+#define closure_tag 0x02
 
 typedef unsigned long ptr;
 
@@ -145,6 +145,8 @@ static void print_ptr_rec(ptr x, int state) {
         }
 
         printf("\"");
+	} else if ((x & obj_mask) == closure_tag) {
+		printf("#<procedure>");
 	} else {
 		printf("#<unknown 0x%08lx>", x);
 	}
